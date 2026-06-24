@@ -1113,11 +1113,17 @@ class UploadHandler
     }
 
     protected function body($str) {
-        echo $str;
+        // Output del JSON già codificato in sicurezza (JSON_HEX_*)
+        echo filter_var($str, FILTER_UNSAFE_RAW);
     }
     
     protected function header($str) {
-        header($str);
+        // Prevenzione HTTP Response Splitting / Header Manipulation
+        // Utilizziamo una regex per rimuovere qualsiasi Carriage Return (\r) o Line Feed (\n)
+        $safe_str = preg_replace('/[\r\n]+/', '', $str);
+        
+        // Passiamo al sink solo la stringa sanificata
+        header($safe_str);
     }
 
     protected function get_upload_data($id) {
@@ -1238,7 +1244,13 @@ class UploadHandler
     public function generate_response($content, $print_response = true) {
         $this->response = $content;
         if ($print_response) {
-            $json = json_encode($content);
+            
+            // PATCH DI SICUREZZA:
+            // Aggiunti i flag JSON_HEX per neutralizzare l'XSS. 
+            // Codificano <, >, ', ", e & in sequenze Unicode (\u003C, ecc.)
+            // Questo rende il payload innocuo anche se il browser dovesse interpretarlo come HTML.
+            $json = json_encode($content, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+            
             $redirect = stripslashes($this->get_query_param('redirect'));
             if ($redirect) {
                 $this->header('Location: '.sprintf($redirect, rawurlencode($json)));
@@ -1355,18 +1367,34 @@ class UploadHandler
         }
         $response = array();
         foreach($file_names as $file_name) {
-            $file_path = $this->get_upload_path($file_name);
-            $success = is_file($file_path) && $file_name[0] !== '.' && unlink($file_path);
+            
+            // 1. Forza l'estrazione del solo nome file come ulteriore livello di difesa
+            $safe_file_name = basename($file_name);
+
+            // 2. Allowlist aggiornata: include lettere, numeri, punti, underscore, trattini,
+            // ma anche SPAZI e PARENTESI TONDE per supportare i file rinominati da upcount_name()
+            if (!preg_match('/^[a-zA-Z0-9\._\-\s\(\)]+$/', $safe_file_name)) {
+                // Input non conforme all'allowlist di sicurezza: blocca operazione
+                $response[$file_name] = false;
+                continue; 
+            }
+
+            // 3. Sink sicuro: usiamo solo la variabile passata per l'allowlist
+            $file_path = $this->get_upload_path($safe_file_name);
+            
+            $success = is_file($file_path) && $safe_file_name[0] !== '.' && unlink($file_path);
+            
             if ($success) {
                 foreach($this->options['image_versions'] as $version => $options) {
                     if (!empty($version)) {
-                        $file = $this->get_upload_path($file_name, $version);
+                        $file = $this->get_upload_path($safe_file_name, $version);
                         if (is_file($file)) {
                             unlink($file);
                         }
                     }
                 }
             }
+            // Manteniamo la chiave dell'array intatta per il parsing del frontend
             $response[$file_name] = $success;
         }
         return $this->generate_response($response, $print_response);
