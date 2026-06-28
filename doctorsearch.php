@@ -9,12 +9,24 @@
 <body>
 <?php
 include("newfunc.php");
+
 if(isset($_POST['doctor_search_submit']))
 {
-	$contact=$_POST['doctor_contact'];
-  $query = "select * from doctb where email= '$contact'";
-  $result = mysqli_query($con,$query);
-  $row=mysqli_fetch_array($result);
+      $contact=$_POST['doctor_contact'];
+      
+      // MODIFICA: Utilizzo del prepared statement per separare logica e dati
+      $query = "select * from doctb where email= ?";
+      $stmt = mysqli_prepare($con, $query);
+      
+      // "s" indica che il parametro $contact è una stringa (string)
+      mysqli_stmt_bind_param($stmt, "s", $contact); 
+      mysqli_stmt_execute($stmt);
+      
+      // Otteniamo il risultato per renderlo compatibile con mysqli_fetch_array
+      $result = mysqli_stmt_get_result($stmt);
+      
+      $row=mysqli_fetch_array($result);
+
   if($row['username']=="" & $row['password']=="" & $row['email']=="" & $row['docFees']==""){
     echo "<script> alert('No entries found!'); 
           window.location.href = 'admin-panel1.php#list-doc';</script>";
@@ -33,19 +45,23 @@ if(isset($_POST['doctor_search_submit']))
     </tr>
   </thead>
   <tbody>";
-
-	// while ($row=mysqli_fetch_array($result)){
-		    $username = $row['username'];
-        $password = $row['password'];
+  // while ($row=mysqli_fetch_array($result)){
+        $username = $row['username'];
+        
+        // MODIFICA: Oscuriamo la password per evitare la Privacy Violation
+        $password = "********"; 
+        
         $email = $row['email'];
         $docFees = $row['docFees'];
         echo "<tr>
-          <td>$username</td>
+          <td>" . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . "</td>
           <td>$password</td>
-          <td>$email</td>
-          <td>$docFees</td>
+          <td>" . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . "</td>
+          <td>" . htmlspecialchars($docFees, ENT_QUOTES, 'UTF-8') . "</td>
         </tr>";
-	// }
+  // }
+
+
 	echo "</tbody></table><center><a href='admin-panel1.php' class='btn btn-light'>Back to dashboard</a></div></center></div></div></div>";
 }
   }

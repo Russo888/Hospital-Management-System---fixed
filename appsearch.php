@@ -12,9 +12,24 @@
 include("newfunc.php");
 if(isset($_POST['app_search_submit']))
 {
-	$contact=$_POST['app_contact'];
-	$query = "select * from appointmenttb where contact= '$contact';";
-  $result = mysqli_query($con,$query);
+	$contact = $_POST['app_contact'];
+  
+  // 1. Definiamo la query utilizzando un placeholder (?) al posto del dato diretto
+  $query = "SELECT * FROM appointmenttb WHERE contact = ?";
+  
+  // 2. Prepariamo lo statement
+  $stmt = mysqli_prepare($con, $query);
+  
+  // 3. Leghiamo il parametro al placeholder specificando il tipo di dato ("s" per stringa)
+  mysqli_stmt_bind_param($stmt, "s", $contact);
+  
+  // 4. Eseguiamo la query in modo sicuro
+  mysqli_stmt_execute($stmt);
+  
+  // 5. Recuperiamo i risultati in un formato compatibile con il resto del tuo codice
+  $result = mysqli_stmt_get_result($stmt);
+  
+  // La riga successiva rimane invariata:
   $row=mysqli_fetch_array($result);
   if($row['fname']=="" & $row['lname']=="" & $row['email']=="" & $row['contact']=="" & $row['doctor']=="" & $row['docFees']=="" & $row['appdate']=="" & $row['apptime']==""){
     echo "<script> alert('No entries found! Please enter valid details'); 
@@ -63,15 +78,15 @@ if(isset($_POST['app_search_submit']))
                       $appstatus = "Cancelled by Doctor";
                     }
           echo "<tr>
-            <td>$fname</td>
-            <td>$lname</td>
-            <td>$email</td>
-            <td>$contact</td>
-            <td>$doctor</td>
-            <td>$docFees</td>
-            <td>$appdate</td>
-            <td>$apptime</td>
-            <td>$appstatus</td>
+            <td>" . htmlspecialchars($fname, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($lname, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($contact, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($doctor, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($docFees, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($appdate, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($apptime, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($appstatus, ENT_QUOTES, 'UTF-8') . "</td>
           </tr>";
     echo "</tbody></table><center><a href='admin-panel1.php' class='btn btn-light'>Back to your Dashboard</a></div></center></div></div></div>";
   }

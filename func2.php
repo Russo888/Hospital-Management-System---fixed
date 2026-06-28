@@ -10,8 +10,16 @@ if(isset($_POST['patsub1'])){
 	$password=$_POST['password'];
   $cpassword=$_POST['cpassword'];
   if($password==$cpassword){
-  	$query="insert into patreg(fname,lname,gender,email,contact,password,cpassword) values ('$fname','$lname','$gender','$email','$contact','$password','$cpassword');";
-    $result=mysqli_query($con,$query);
+
+    // MODIFICA: Utilizzo dei prepared statement per l'inserimento sicuro dei dati
+    $query = "insert into patreg(fname,lname,gender,email,contact,password,cpassword) values (?,?,?,?,?,?,?)";
+    $stmt = mysqli_prepare($con, $query);
+
+    // "sssssss" indica che stiamo passando 7 parametri, tutti di tipo stringa
+    mysqli_stmt_bind_param($stmt, "sssssss", $fname, $lname, $gender, $email, $contact, $password, $cpassword);
+
+    // Eseguiamo lo statement e salviamo l'esito (true/false) in $result per il controllo successivo
+    $result = mysqli_stmt_execute($stmt);
     if($result){
         $_SESSION['username'] = $_POST['fname']." ".$_POST['lname'];
         $_SESSION['fname'] = $_POST['fname'];
@@ -36,10 +44,19 @@ if(isset($_POST['patsub1'])){
 if(isset($_POST['update_data']))
 {
 	$contact=$_POST['contact'];
-	$status=$_POST['status'];
-	$query="update appointmenttb set payment='$status' where contact='$contact';";
-	$result=mysqli_query($con,$query);
-	if($result)
+  $status=$_POST['status'];
+
+  // MODIFICA: Utilizzo del prepared statement per l'update sicuro del pagamento
+  $query = "update appointmenttb set payment=? where contact=?";
+  $stmt = mysqli_prepare($con, $query);
+  
+  // "ss" indica due stringhe: la prima per payment ($status) e la seconda per contact ($contact)
+  mysqli_stmt_bind_param($stmt, "ss", $status, $contact);
+  
+  // Eseguiamo lo statement e assegniamo l'esito a $result per il controllo successivo
+  $result = mysqli_stmt_execute($stmt);
+
+  if($result)
 		header("Location:updated.php");
 }
 
@@ -61,10 +78,19 @@ if(isset($_POST['update_data']))
 
 if(isset($_POST['doc_sub']))
 {
-	$name=$_POST['name'];
-	$query="insert into doctb(name)values('$name')";
-	$result=mysqli_query($con,$query);
-	if($result)
+  $name=$_POST['name'];
+
+  // MODIFICA: Utilizzo del prepared statement per l'inserimento sicuro del medico
+  $query = "insert into doctb(name) values (?)";
+  $stmt = mysqli_prepare($con, $query);
+  
+  // "s" indica che ci aspettiamo un singolo parametro di tipo stringa
+  mysqli_stmt_bind_param($stmt, "s", $name);
+  
+  // Eseguiamo lo statement e assegniamo l'esito a $result per il redirect
+  $result = mysqli_stmt_execute($stmt);
+
+  if($result)
 		header("Location:adddoc.php");
 }
 function display_admin_panel(){

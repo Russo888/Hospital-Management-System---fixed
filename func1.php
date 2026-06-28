@@ -3,10 +3,17 @@ session_start();
 $con=mysqli_connect("localhost","root","","myhmsdb");
 if(isset($_POST['docsub1'])){
 	$dname=$_POST['username3'];
-	$dpass=$_POST['password3'];
-	$query="select * from doctb where username='$dname' and password='$dpass';";
-	$result=mysqli_query($con,$query);
-	if(mysqli_num_rows($result)==1)
+  $dpass=$_POST['password3'];
+  
+  // MODIFICA: Utilizzo dei prepared statement per prevenire SQL Injection
+  $query="select * from doctb where username=? and password=?";
+  $stmt = mysqli_prepare($con, $query);
+  // "ss" indica che stiamo passando due parametri di tipo stringa ($dname e $dpass)
+  mysqli_stmt_bind_param($stmt, "ss", $dname, $dpass);
+  mysqli_stmt_execute($stmt);
+  // Otteniamo il risultato per renderlo compatibile con le funzioni successive
+  $result = mysqli_stmt_get_result($stmt);
+  if(mysqli_num_rows($result)==1)
 	{
     while($row=mysqli_fetch_array($result,MYSQLI_ASSOC)){
     
@@ -44,9 +51,12 @@ function display_docs()
 	while($row=mysqli_fetch_array($result))
 	{
 		$name=$row['name'];
-		# echo'<option value="" disabled selected>Select Doctor</option>';
-		echo '<option value="'.$name.'">'.$name.'</option>';
-	}
+    # echo'<option value="" disabled selected>Select Doctor</option>';
+    
+    $safe_name = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+    echo '<option value="' . $safe_name . '">' . $safe_name . '</option>';
+    
+ }
 }
 
 // if(isset($_POST['doc_sub']))

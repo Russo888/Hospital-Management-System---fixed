@@ -3,10 +3,20 @@ session_start();
 $con=mysqli_connect("localhost","root","","myhmsdb");
 if(isset($_POST['adsub'])){
 	$username=$_POST['username1'];
-	$password=$_POST['password2'];
-	$query="select * from admintb where username='$username' and password='$password';";
-	$result=mysqli_query($con,$query);
-	if(mysqli_num_rows($result)==1)
+    $password=$_POST['password2'];
+
+    // MODIFICA: Utilizzo dei prepared statement per prevenire SQL Injection sul login admin
+    $query = "select * from admintb where username=? and password=?";
+    $stmt = mysqli_prepare($con, $query);
+    
+    // "ss" indica che stiamo passando due parametri di tipo stringa ($username e $password)
+    mysqli_stmt_bind_param($stmt, "ss", $username, $password);
+    mysqli_stmt_execute($stmt);
+    
+    // Otteniamo il risultato per renderlo compatibile con mysqli_num_rows
+    $result = mysqli_stmt_get_result($stmt);
+
+    if(mysqli_num_rows($result)==1)
 	{
 		$_SESSION['username']=$username;
 		header("Location:admin-panel1.php");
@@ -19,10 +29,19 @@ if(isset($_POST['adsub'])){
 if(isset($_POST['update_data']))
 {
 	$contact=$_POST['contact'];
-	$status=$_POST['status'];
-	$query="update appointmenttb set payment='$status' where contact='$contact';";
-	$result=mysqli_query($con,$query);
-	if($result)
+    $status=$_POST['status'];
+
+    // MODIFICA: Utilizzo del prepared statement per l'update sicuro del pagamento
+    $query = "update appointmenttb set payment=? where contact=?";
+    $stmt = mysqli_prepare($con, $query);
+    
+    // "ss" indica due stringhe: la prima per il segnaposto di payment ($status) e la seconda per contact ($contact)
+    mysqli_stmt_bind_param($stmt, "ss", $status, $contact);
+    
+    // Eseguiamo lo statement e assegniamo l'esito a $result per il redirect successivo
+    $result = mysqli_stmt_execute($stmt);
+
+    if($result)
 		header("Location:updated.php");
 }
 
@@ -36,17 +55,30 @@ function display_docs()
 	$result=mysqli_query($con,$query);
 	while($row=mysqli_fetch_array($result))
 	{
-		$name=$row['name'];
-		# echo'<option value="" disabled selected>Select Doctor</option>';
-		echo '<option value="'.$name.'">'.$name.'</option>';
+	$name=$row['name'];
+	# echo'<option value="" disabled selected>Select Doctor</option>';
+
+	// MODIFICA: Sanitizzazione del nome del medico per prevenire XSS
+	$safe_name = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+	echo '<option value="' . $safe_name . '">' . $safe_name . '</option>';
+
 	}
 }
 
 if(isset($_POST['doc_sub']))
 {
-	$name=$_POST['name'];
-	$query="insert into doctb(name)values('$name')";
-	$result=mysqli_query($con,$query);
-	if($result)
+    $name=$_POST['name'];
+
+    // MODIFICA: Utilizzo del prepared statement per l'inserimento sicuro del nuovo medico
+    $query = "insert into doctb(name) values (?)";
+    $stmt = mysqli_prepare($con, $query);
+    
+    // "s" indica che ci aspettiamo un singolo parametro di tipo stringa ($name)
+    mysqli_stmt_bind_param($stmt, "s", $name);
+    
+    // Eseguiamo lo statement e salviamo l'esito in $result per il redirect
+    $result = mysqli_stmt_execute($stmt);
+
+    if($result)
 		header("Location:adddoc.php");
 }
