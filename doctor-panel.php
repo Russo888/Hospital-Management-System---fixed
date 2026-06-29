@@ -3,13 +3,17 @@
 include('func1.php');
 $con=mysqli_connect("localhost","root","","myhmsdb");
 $doctor = $_SESSION['dname'];
-if(isset($_GET['cancel']))
+// BEST PRACTICE: Utilizzo di Prepared Statements (OpenCRE-734-118)
+if(isset($_GET['cancel']) && isset($_GET['ID']))
   {
-    $query=mysqli_query($con,"update appointmenttb set doctorStatus='0' where ID = '".$_GET['ID']."'");
-    if($query)
+    $stmt_cancel = $con->prepare("UPDATE appointmenttb SET doctorStatus='0' WHERE ID = ?");
+    $stmt_cancel->bind_param("i", $_GET['ID']);
+    
+    if($stmt_cancel->execute())
     {
       echo "<script>alert('Your appointment successfully cancelled');</script>";
     }
+    $stmt_cancel->close();
   }
 
   // if(isset($_GET['prescribe'])){
@@ -286,18 +290,16 @@ if(isset($_GET['cancel']))
                     while ($row = mysqli_fetch_array($result)){
                   ?>
                       <tr>
-                        <td><?php echo $row['pid'];?></td>
-                        <td><?php echo $row['fname'];?></td>
-                        <td><?php echo $row['lname'];?></td>
-                        <td><?php echo $row['ID'];?></td>
-                        
-                        <td><?php echo $row['appdate'];?></td>
-                        <td><?php echo $row['apptime'];?></td>
-                        <td><?php echo $row['disease'];?></td>
-                        <td><?php echo $row['allergy'];?></td>
-                        <td><?php echo $row['prescription'];?></td>
-                    
-                      </tr>
+						  <td><?php echo htmlspecialchars($row['pid'], ENT_QUOTES, 'UTF-8'); ?></td>
+						  <td><?php echo htmlspecialchars($row['fname'], ENT_QUOTES, 'UTF-8'); ?></td>
+						  <td><?php echo htmlspecialchars($row['lname'], ENT_QUOTES, 'UTF-8'); ?></td>
+						  <td><?php echo htmlspecialchars($row['ID'], ENT_QUOTES, 'UTF-8'); ?></td>
+						  <td><?php echo htmlspecialchars($row['appdate'], ENT_QUOTES, 'UTF-8'); ?></td>
+						  <td><?php echo htmlspecialchars($row['apptime'], ENT_QUOTES, 'UTF-8'); ?></td>
+						  <td><?php echo htmlspecialchars($row['disease'], ENT_QUOTES, 'UTF-8'); ?></td>
+						  <td><?php echo htmlspecialchars($row['allergy'], ENT_QUOTES, 'UTF-8'); ?></td>
+						  <td><?php echo htmlspecialchars($row['prescription'], ENT_QUOTES, 'UTF-8'); ?></td>
+					  </tr>
                     <?php }
                     ?>
                 </tbody>
@@ -364,7 +366,7 @@ if(isset($_GET['cancel']))
                   <div class="col-md-4"><label>Doctor Name:</label></div>
                   <div class="col-md-8"><input type="text" class="form-control" name="doctor" required></div><br><br>
                   <div class="col-md-4"><label>Password:</label></div>
-                  <div class="col-md-8"><input type="password" class="form-control"  name="dpassword" required></div><br><br>
+                  <div class="col-md-8"><input type="password" class="form-control" name="dpassword" autocomplete="new-password" required></div><br><br>
                   <div class="col-md-4"><label>Email ID:</label></div>
                   <div class="col-md-8"><input type="email"  class="form-control" name="demail" required></div><br><br>
                   <div class="col-md-4"><label>Consultancy Fees:</label></div>
