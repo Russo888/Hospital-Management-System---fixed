@@ -1,20 +1,51 @@
 <!DOCTYPE html>
-<?php 
+<?php
+// Avvio sessione prima di qualsiasi accesso a $_SESSION
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Verifica autenticazione
+if (empty($_SESSION['dname'])) {
+    header('Location: login1.php');
+    exit();
+}
+
 include('func1.php');
-$con=mysqli_connect("localhost","root","","myhmsdb");
+
+// Credenziali DB da file di configurazione esterno alla webroot
+require_once('/etc/myhms/db_config.php'); // definisce DB_HOST, DB_USER, DB_PASS, DB_NAME
+$con = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+if (!$con) {
+    error_log('DB connection failed: ' . mysqli_connect_error());
+    die('Database connection error.');
+}
+
+// Generazione token CSRF
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 $doctor = $_SESSION['dname'];
-// BEST PRACTICE: Utilizzo di Prepared Statements (OpenCRE-734-118)
-if(isset($_GET['cancel']) && isset($_GET['ID']))
-  {
-    $stmt_cancel = $con->prepare("UPDATE appointmenttb SET doctorStatus='0' WHERE ID = ?");
-    $stmt_cancel->bind_param("i", $_GET['ID']);
-    
-    if($stmt_cancel->execute())
-    {
-      echo "<script>alert('Your appointment successfully cancelled');</script>";
+
+// SQL Injection riga 8 — fix: prepared statement + verifica CSRF + ownership
+if (isset($_GET['cancel'])) {
+    if (!hash_equals($_SESSION['csrf_token'], $_GET['csrf_token'] ?? '')) {
+        die('Invalid CSRF token.');
     }
-    $stmt_cancel->close();
-  }
+    $cancel_id = intval($_GET['ID'] ?? 0);
+    if ($cancel_id > 0) {
+        // Ownership check: il dottore puo cancellare solo i propri appuntamenti
+        $stmt = mysqli_prepare($con,
+            "UPDATE appointmenttb SET doctorStatus='0' WHERE ID = ? AND doctor = ?");
+        mysqli_stmt_bind_param($stmt, 'is', $cancel_id, $doctor);
+        $query = mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+        if ($query) {
+            echo "<script>alert('Your appointment successfully cancelled');</script>";
+        }
+    }
+}
 
   // if(isset($_GET['prescribe'])){
     
@@ -105,7 +136,7 @@ if(isset($_GET['cancel']) && isset($_GET['ID']))
   </style>
   <body style="padding-top:50px;">
    <div class="container-fluid" style="margin-top:50px;">
-    <h3 style = "margin-left: 40%; padding-bottom: 20px;font-family:'IBM Plex Sans', sans-serif;"> Welcome &nbsp<?php echo $_SESSION['dname'] ?>  </h3>
+    <h3 style = "margin-left: 40%; padding-bottom: 20px;font-family:'IBM Plex Sans', sans-serif;"> Welcome &nbsp<?php echo htmlspecialchars($_SESSION['dname'], ENT_QUOTES, 'UTF-8'); ?>  </h3>
     <div class="row">
   <div class="col-md-4" style="max-width:18%;margin-top: 3%;">
     <div class="list-group" id="list-tab" role="tablist">
@@ -183,23 +214,26 @@ if(isset($_GET['cancel']) && isset($_GET['ID']))
                 </thead>
                 <tbody>
                   <?php 
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
+                    // Riutilizzo connessione esistente; prepared statement (SQL Injection riga 186)
                     $dname = $_SESSION['dname'];
-                    $query = "select pid,ID,fname,lname,gender,email,contact,appdate,apptime,userStatus,doctorStatus from appointmenttb where doctor='$dname';";
-                    $result = mysqli_query($con,$query);
+                    $stmt = mysqli_prepare($con,
+                        "SELECT pid,ID,fname,lname,gender,email,contact,appdate,apptime,userStatus,doctorStatus
+                         FROM appointmenttb WHERE doctor = ?");
+                    mysqli_stmt_bind_param($stmt, 's', $dname);
+                    mysqli_stmt_execute($stmt);
+                    $result = mysqli_stmt_get_result($stmt);
                     while ($row = mysqli_fetch_array($result)){
                       ?>
                       <tr>
-                      <td><?php echo $row['pid'];?></td>
-                        <td><?php echo $row['ID'];?></td>
-                        <td><?php echo $row['fname'];?></td>
-                        <td><?php echo $row['lname'];?></td>
-                        <td><?php echo $row['gender'];?></td>
-                        <td><?php echo $row['email'];?></td>
-                        <td><?php echo $row['contact'];?></td>
-                        <td><?php echo $row['appdate'];?></td>
-                        <td><?php echo $row['apptime'];?></td>
+                      <td><?php echo htmlspecialchars($row['pid'],     ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['ID'],    ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['fname'],   ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['lname'],   ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['gender'],  ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['email'],   ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['contact'], ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['appdate'], ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['apptime'], ENT_QUOTES,'UTF-8');?></td>
                         <td>
                     <?php if(($row['userStatus']==1) && ($row['doctorStatus']==1))  
                     {
@@ -221,7 +255,7 @@ if(isset($_GET['cancel']) && isset($_GET['ID']))
                         { ?>
 
 													
-	                        <a href="doctor-panel.php?ID=<?php echo $row['ID']?>&cancel=update" 
+	                        <a href="doctor-panel.php?ID=<?php echo intval($row['ID'])?>&cancel=update&csrf_token=<?php echo urlencode($_SESSION['csrf_token']); ?>" 
                               onClick="return confirm('Are you sure you want to cancel this appointment ?')"
                               title="Cancel Appointment" tooltip-placement="top" tooltip="Remove"><button class="btn btn-danger">Cancel</button></a>
 	                        <?php } else {
@@ -236,7 +270,7 @@ if(isset($_GET['cancel']) && isset($_GET['ID']))
                         <?php if(($row['userStatus']==1) && ($row['doctorStatus']==1))  
                         { ?>
 
-                        <a href="prescribe.php?pid=<?php echo $row['pid']?>&ID=<?php echo $row['ID']?>&fname=<?php echo $row['fname']?>&lname=<?php echo $row['lname']?>&appdate=<?php echo $row['appdate']?>&apptime=<?php echo $row['apptime']?>"
+                        <a href="prescribe.php?pid=<?php echo intval($row['pid'])?>&ID=<?php echo intval($row['ID'])?>&fname=<?php echo urlencode($row['fname'])?>&lname=<?php echo urlencode($row['lname'])?>&appdate=<?php echo urlencode($row['appdate'])?>&apptime=<?php echo urlencode($row['apptime'])?>"
                         tooltip-placement="top" tooltip="Remove" title="prescribe">
                         <button class="btn btn-success">Prescibe</button></a>
                         <?php } else {
@@ -248,7 +282,9 @@ if(isset($_GET['cancel']) && isset($_GET['ID']))
 
 
                       </tr></a>
-                    <?php } ?>
+                    <?php }
+                    mysqli_stmt_close($stmt);
+                    ?>
                 </tbody>
               </table>
         <br>
@@ -275,32 +311,32 @@ if(isset($_GET['cancel']) && isset($_GET['ID']))
                 </thead>
                 <tbody>
                   <?php 
-
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-
-                    $query = "select pid,fname,lname,ID,appdate,apptime,disease,allergy,prescription from prestb where doctor='$doctor';";
-                    
-                    $result = mysqli_query($con,$query);
-                    if(!$result){
-                      echo mysqli_error($con);
-                    }
-                    
+                    // Riutilizzo connessione esistente; prepared statement (SQL Injection riga 280)
+                    $stmt = mysqli_prepare($con,
+                        "SELECT pid,fname,lname,ID,appdate,apptime,disease,allergy,prescription
+                         FROM prestb WHERE doctor = ?");
+                    mysqli_stmt_bind_param($stmt, 's', $doctor);
+                    mysqli_stmt_execute($stmt);
+                    $result = mysqli_stmt_get_result($stmt);
+                    // Rimosso echo mysqli_error(): non esporre dettagli interni del DB
 
                     while ($row = mysqli_fetch_array($result)){
                   ?>
                       <tr>
-						  <td><?php echo htmlspecialchars($row['pid'], ENT_QUOTES, 'UTF-8'); ?></td>
-						  <td><?php echo htmlspecialchars($row['fname'], ENT_QUOTES, 'UTF-8'); ?></td>
-						  <td><?php echo htmlspecialchars($row['lname'], ENT_QUOTES, 'UTF-8'); ?></td>
-						  <td><?php echo htmlspecialchars($row['ID'], ENT_QUOTES, 'UTF-8'); ?></td>
-						  <td><?php echo htmlspecialchars($row['appdate'], ENT_QUOTES, 'UTF-8'); ?></td>
-						  <td><?php echo htmlspecialchars($row['apptime'], ENT_QUOTES, 'UTF-8'); ?></td>
-						  <td><?php echo htmlspecialchars($row['disease'], ENT_QUOTES, 'UTF-8'); ?></td>
-						  <td><?php echo htmlspecialchars($row['allergy'], ENT_QUOTES, 'UTF-8'); ?></td>
-						  <td><?php echo htmlspecialchars($row['prescription'], ENT_QUOTES, 'UTF-8'); ?></td>
-					  </tr>
+                        <td><?php echo htmlspecialchars($row['pid'],          ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['fname'],        ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['lname'],        ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['ID'],           ENT_QUOTES,'UTF-8');?></td>
+                        
+                        <td><?php echo htmlspecialchars($row['appdate'],      ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['apptime'],      ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['disease'],      ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['allergy'],      ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['prescription'], ENT_QUOTES,'UTF-8');?></td>
+                    
+                      </tr>
                     <?php }
+                    mysqli_stmt_close($stmt);
                     ?>
                 </tbody>
               </table>
@@ -326,28 +362,20 @@ if(isset($_GET['cancel']) && isset($_GET['ID']))
                 </thead>
                 <tbody>
                   <?php 
-
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-
-                    $query = "select * from appointmenttb;";
+                    // Riutilizzo connessione esistente; select esplicito (no select *)
+                    $query = "SELECT fname,lname,email,contact,doctor,docFees,appdate,apptime FROM appointmenttb";
                     $result = mysqli_query($con,$query);
                     while ($row = mysqli_fetch_array($result)){
-              
-                      #$fname = $row['fname'];
-                      #$lname = $row['lname'];
-                      #$email = $row['email'];
-                      #$contact = $row['contact'];
                   ?>
                       <tr>
-                        <td><?php echo $row['fname'];?></td>
-                        <td><?php echo $row['lname'];?></td>
-                        <td><?php echo $row['email'];?></td>
-                        <td><?php echo $row['contact'];?></td>
-                        <td><?php echo $row['doctor'];?></td>
-                        <td><?php echo $row['docFees'];?></td>
-                        <td><?php echo $row['appdate'];?></td>
-                        <td><?php echo $row['apptime'];?></td>
+                        <td><?php echo htmlspecialchars($row['fname'],   ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['lname'],   ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['email'],   ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['contact'], ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['doctor'],  ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['docFees'], ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['appdate'], ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['apptime'], ENT_QUOTES,'UTF-8');?></td>
                       </tr>
                     <?php } ?>
                 </tbody>
@@ -366,7 +394,7 @@ if(isset($_GET['cancel']) && isset($_GET['ID']))
                   <div class="col-md-4"><label>Doctor Name:</label></div>
                   <div class="col-md-8"><input type="text" class="form-control" name="doctor" required></div><br><br>
                   <div class="col-md-4"><label>Password:</label></div>
-                  <div class="col-md-8"><input type="password" class="form-control" name="dpassword" autocomplete="new-password" required></div><br><br>
+                  <div class="col-md-8"><input type="password" class="form-control" autocomplete="new-password" name="dpassword" required></div><br><br>
                   <div class="col-md-4"><label>Email ID:</label></div>
                   <div class="col-md-8"><input type="email"  class="form-control" name="demail" required></div><br><br>
                   <div class="col-md-4"><label>Consultancy Fees:</label></div>
