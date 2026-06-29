@@ -1,37 +1,86 @@
 <!DOCTYPE html>
-<?php 
-$con=mysqli_connect("localhost","root","","myhmsdb");
+<?php
+// Credenziali DB caricate da file di configurazione esterno (fuori dalla webroot)
+// per evitare l'esposizione di segreti nel codice sorgente.
+require_once('/etc/myhms/db_config.php'); // definisce DB_HOST, DB_USER, DB_PASS, DB_NAME
+$con = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+if (!$con) {
+    error_log('DB connection failed: ' . mysqli_connect_error());
+    die('Database connection error.');
+}
+
+// Protezione CSRF: genera/verifica token di sessione
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 include('newfunc.php');
 
-if(isset($_POST['docsub']))
-{
-  $doctor=$_POST['doctor'];
-  $dpassword=$_POST['dpassword'];
-  $demail=$_POST['demail'];
-  $spec=$_POST['special'];
-  $docFees=$_POST['docFees'];
-  $query="insert into doctb(username,password,email,spec,docFees)values('$doctor','$dpassword','$demail','$spec','$docFees')";
-  $result=mysqli_query($con,$query);
-  if($result)
-    {
-      echo "<script>alert('Doctor added successfully!');</script>";
-  }
+if (isset($_POST['docsub'])) {
+    // Verifica token CSRF
+    if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
+        die('Invalid CSRF token.');
+    }
+
+    $doctor   = trim($_POST['doctor']   ?? '');
+    $dpassword= $_POST['dpassword']     ?? '';
+    $demail   = trim($_POST['demail']   ?? '');
+    $spec     = trim($_POST['special']  ?? '');
+    $docFees  = trim($_POST['docFees']  ?? '');
+
+    // Whitelist specializzazioni consentite (Minimize — raccogliamo solo ciò che serve)
+    $allowed_specs = ['General', 'Cardiologist', 'Neurologist', 'Pediatrician'];
+    if (!in_array($spec, $allowed_specs, true)) {
+        die('Invalid specialization.');
+    }
+
+    // Validazione email
+    if (!filter_var($demail, FILTER_VALIDATE_EMAIL)) {
+        die('Invalid email address.');
+    }
+
+    // Hash della password prima della memorizzazione (Privacy pattern: Aggregate)
+    $hashed_password = password_hash($dpassword, PASSWORD_BCRYPT);
+
+    // Prepared statement per prevenire SQL injection
+    $stmt = mysqli_prepare($con,
+        "INSERT INTO doctb (username, password, email, spec, docFees) VALUES (?, ?, ?, ?, ?)");
+    mysqli_stmt_bind_param($stmt, 'sssss', $doctor, $hashed_password, $demail, $spec, $docFees);
+    $result = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+
+    if ($result) {
+        echo "<script>alert('Doctor added successfully!');</script>";
+    }
 }
 
 
-if(isset($_POST['docsub1']))
-{
-  $demail=$_POST['demail'];
-  $query="delete from doctb where email='$demail';";
-  $result=mysqli_query($con,$query);
-  if($result)
-    {
-      echo "<script>alert('Doctor removed successfully!');</script>";
-  }
-  else{
-    echo "<script>alert('Unable to delete!');</script>";
-  }
+if (isset($_POST['docsub1'])) {
+    // Verifica token CSRF
+    if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
+        die('Invalid CSRF token.');
+    }
+
+    $demail = trim($_POST['demail'] ?? '');
+
+    if (!filter_var($demail, FILTER_VALIDATE_EMAIL)) {
+        die('Invalid email address.');
+    }
+
+    // Prepared statement per prevenire SQL injection
+    $stmt = mysqli_prepare($con, "DELETE FROM doctb WHERE email = ?");
+    mysqli_stmt_bind_param($stmt, 's', $demail);
+    $result = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+
+    if ($result) {
+        echo "<script>alert('Doctor removed successfully!');</script>";
+    } else {
+        echo "<script>alert('Unable to delete!');</script>";
+    }
 }
 
 
@@ -266,28 +315,25 @@ if(isset($_POST['docsub1']))
                     <th scope="col">Doctor Name</th>
                     <th scope="col">Specialization</th>
                     <th scope="col">Email</th>
-                    <th scope="col">Password</th>
+                    <!-- Password rimossa dall'elenco: non esporre credenziali in chiaro (Privacy pattern: Minimal Disclosure) -->
                     <th scope="col">Fees</th>
                   </tr>
                 </thead>
                 <tbody>
                   <?php 
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-                    $query = "select * from doctb";
-                    $result = mysqli_query($con,$query);
-                    while ($row = mysqli_fetch_array($result)){
-                      $username = $row['username'];
-                      $spec = $row['spec'];
-                      $email = $row['email'];
-                      $password = $row['password'];
-                      $docFees = $row['docFees'];
+                    // Riutilizzo connessione esistente; rimosso 'select *' per escludere la password
+                    $query = "SELECT username, spec, email, docFees FROM doctb";
+                    $result = mysqli_query($con, $query);
+                    while ($row = mysqli_fetch_array($result)) {
+                      $username = htmlspecialchars($row['username'], ENT_QUOTES, 'UTF-8');
+                      $spec     = htmlspecialchars($row['spec'],     ENT_QUOTES, 'UTF-8');
+                      $email    = htmlspecialchars($row['email'],    ENT_QUOTES, 'UTF-8');
+                      $docFees  = htmlspecialchars($row['docFees'],  ENT_QUOTES, 'UTF-8');
                       
                       echo "<tr>
                         <td>$username</td>
                         <td>$spec</td>
                         <td>$email</td>
-                        <td>$password</td>
                         <td>$docFees</td>
                       </tr>";
                     }
@@ -318,23 +364,21 @@ if(isset($_POST['docsub1']))
                     <th scope="col">Gender</th>
                     <th scope="col">Email</th>
                     <th scope="col">Contact</th>
-                    <th scope="col">Password</th>
+                    <!-- Password rimossa: non esporre credenziali in chiaro (Privacy pattern: Minimal Disclosure) -->
                   </tr>
                 </thead>
                 <tbody>
                   <?php 
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-                    $query = "select * from patreg";
-                    $result = mysqli_query($con,$query);
-                    while ($row = mysqli_fetch_array($result)){
-                      $pid = $row['pid'];
-                      $fname = $row['fname'];
-                      $lname = $row['lname'];
-                      $gender = $row['gender'];
-                      $email = $row['email'];
-                      $contact = $row['contact'];
-                      $password = $row['password'];
+                    // Riutilizzo connessione esistente; rimosso 'select *' per escludere la password
+                    $query = "SELECT pid, fname, lname, gender, email, contact FROM patreg";
+                    $result = mysqli_query($con, $query);
+                    while ($row = mysqli_fetch_array($result)) {
+                      $pid     = htmlspecialchars($row['pid'],     ENT_QUOTES, 'UTF-8');
+                      $fname   = htmlspecialchars($row['fname'],   ENT_QUOTES, 'UTF-8');
+                      $lname   = htmlspecialchars($row['lname'],   ENT_QUOTES, 'UTF-8');
+                      $gender  = htmlspecialchars($row['gender'],  ENT_QUOTES, 'UTF-8');
+                      $email   = htmlspecialchars($row['email'],   ENT_QUOTES, 'UTF-8');
+                      $contact = htmlspecialchars($row['contact'], ENT_QUOTES, 'UTF-8');
                       
                       echo "<tr>
                         <td>$pid</td>
@@ -343,7 +387,6 @@ if(isset($_POST['docsub1']))
                         <td>$gender</td>
                         <td>$email</td>
                         <td>$contact</td>
-                        <td>$password</td>
                       </tr>";
                     }
 
@@ -379,21 +422,20 @@ if(isset($_POST['docsub1']))
                 </thead>
                 <tbody>
                   <?php 
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-                    $query = "select * from prestb";
-                    $result = mysqli_query($con,$query);
-                    while ($row = mysqli_fetch_array($result)){
-                      $doctor = $row['doctor'];
-                      $pid = $row['pid'];
-                      $ID = $row['ID'];
-                      $fname = $row['fname'];
-                      $lname = $row['lname'];
-                      $appdate = $row['appdate'];
-                      $apptime = $row['apptime'];
-                      $disease = $row['disease'];
-                      $allergy = $row['allergy'];
-                      $pres = $row['prescription'];
+                    // Riutilizzo connessione esistente
+                    $query = "SELECT doctor, pid, ID, fname, lname, appdate, apptime, disease, allergy, prescription FROM prestb";
+                    $result = mysqli_query($con, $query);
+                    while ($row = mysqli_fetch_array($result)) {
+                      $doctor  = htmlspecialchars($row['doctor'],       ENT_QUOTES, 'UTF-8');
+                      $pid     = htmlspecialchars($row['pid'],          ENT_QUOTES, 'UTF-8');
+                      $ID      = htmlspecialchars($row['ID'],           ENT_QUOTES, 'UTF-8');
+                      $fname   = htmlspecialchars($row['fname'],        ENT_QUOTES, 'UTF-8');
+                      $lname   = htmlspecialchars($row['lname'],        ENT_QUOTES, 'UTF-8');
+                      $appdate = htmlspecialchars($row['appdate'],      ENT_QUOTES, 'UTF-8');
+                      $apptime = htmlspecialchars($row['apptime'],      ENT_QUOTES, 'UTF-8');
+                      $disease = htmlspecialchars($row['disease'],      ENT_QUOTES, 'UTF-8');
+                      $allergy = htmlspecialchars($row['allergy'],      ENT_QUOTES, 'UTF-8');
+                      $pres    = htmlspecialchars($row['prescription'], ENT_QUOTES, 'UTF-8');
 
                       
                       echo "<tr>
@@ -451,25 +493,23 @@ if(isset($_POST['docsub1']))
                 <tbody>
                   <?php 
 
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-
-                    $query = "select * from appointmenttb;";
+                    // Riutilizzo connessione esistente; select esplicito per escludere campi non necessari
+                    $query = "SELECT ID, pid, fname, lname, gender, email, contact, doctor, docFees, appdate, apptime, userStatus, doctorStatus FROM appointmenttb";
                     $result = mysqli_query($con,$query);
                     while ($row = mysqli_fetch_array($result)){
                   ?>
                       <tr>
-                        <td><?php echo $row['ID'];?></td>
-                        <td><?php echo $row['pid'];?></td>
-                        <td><?php echo $row['fname'];?></td>
-                        <td><?php echo $row['lname'];?></td>
-                        <td><?php echo $row['gender'];?></td>
-                        <td><?php echo $row['email'];?></td>
-                        <td><?php echo $row['contact'];?></td>
-                        <td><?php echo $row['doctor'];?></td>
-                        <td><?php echo $row['docFees'];?></td>
-                        <td><?php echo $row['appdate'];?></td>
-                        <td><?php echo $row['apptime'];?></td>
+                        <td><?php echo htmlspecialchars($row['ID'],      ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['pid'],     ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['fname'],   ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['lname'],   ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['gender'],  ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['email'],   ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['contact'], ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['doctor'],  ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['docFees'], ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['appdate'], ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['apptime'], ENT_QUOTES, 'UTF-8');?></td>
                         <td>
                     <?php if(($row['userStatus']==1) && ($row['doctorStatus']==1))  
                     {
@@ -496,6 +536,7 @@ if(isset($_POST['docsub1']))
 
       <div class="tab-pane fade" id="list-settings" role="tabpanel" aria-labelledby="list-settings-list">
         <form class="form-group" method="post" action="admin-panel1.php">
+          <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
           <div class="row">
                   <div class="col-md-4"><label>Doctor Name:</label></div>
                   <div class="col-md-8"><input type="text" class="form-control" name="doctor" onkeydown="return alphaOnly(event);" required></div><br><br>
@@ -526,6 +567,7 @@ if(isset($_POST['docsub1']))
 
       <div class="tab-pane fade" id="list-settings1" role="tabpanel" aria-labelledby="list-settings1-list">
         <form class="form-group" method="post" action="admin-panel1.php">
+          <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
           <div class="row">
           
                   <div class="col-md-4"><label>Email ID:</label></div>
@@ -561,23 +603,17 @@ if(isset($_POST['docsub1']))
                 <tbody>
                   <?php 
 
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-
-                    $query = "select * from contact;";
+                    // Riutilizzo connessione esistente; select esplicito
+                    $query = "SELECT name, email, contact, message FROM contact";
                     $result = mysqli_query($con,$query);
                     while ($row = mysqli_fetch_array($result)){
               
-                      #$fname = $row['fname'];
-                      #$lname = $row['lname'];
-                      #$email = $row['email'];
-                      #$contact = $row['contact'];
                   ?>
                       <tr>
-                        <td><?php echo $row['name'];?></td>
-                        <td><?php echo $row['email'];?></td>
-                        <td><?php echo $row['contact'];?></td>
-                        <td><?php echo $row['message'];?></td>
+                        <td><?php echo htmlspecialchars($row['name'],    ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['email'],   ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['contact'], ENT_QUOTES, 'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['message'], ENT_QUOTES, 'UTF-8');?></td>
                       </tr>
                     <?php } ?>
                 </tbody>

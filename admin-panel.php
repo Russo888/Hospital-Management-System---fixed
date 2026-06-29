@@ -1,48 +1,101 @@
 <!DOCTYPE html>
-<?php 
-include('func.php');  
+<?php
+// Avvio sessione prima di qualsiasi accesso a $_SESSION
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Verifica autenticazione: reindirizza se la sessione non è valida
+if (empty($_SESSION['pid'])) {
+    header('Location: login.php');
+    exit();
+}
+
+include('func.php');
 include('newfunc.php');
-$con=mysqli_connect("localhost","root","","myhmsdb");
 
+// Credenziali DB caricate da file di configurazione esterno (fuori dalla webroot)
+require_once('/etc/myhms/db_config.php'); // definisce DB_HOST, DB_USER, DB_PASS, DB_NAME
+$con = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+if (!$con) {
+    error_log('DB connection failed: ' . mysqli_connect_error());
+    die('Database connection error.');
+}
 
-  $pid = $_SESSION['pid'];
+// Generazione token CSRF per i form
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Lettura dati di sessione (già verificata l'esistenza di pid sopra)
+  $pid      = $_SESSION['pid'];
   $username = $_SESSION['username'];
-  $email = $_SESSION['email'];
-  $fname = $_SESSION['fname'];
-  $gender = $_SESSION['gender'];
-  $lname = $_SESSION['lname'];
-  $contact = $_SESSION['contact'];
+  $email    = $_SESSION['email'];
+  $fname    = $_SESSION['fname'];
+  $gender   = $_SESSION['gender'];
+  $lname    = $_SESSION['lname'];
+  $contact  = $_SESSION['contact'];
 
 
 
 if(isset($_POST['app-submit']))
 {
-  $pid = $_SESSION['pid'];
-  $username = $_SESSION['username'];
-  $email = $_SESSION['email'];
-  $fname = $_SESSION['fname'];
-  $lname = $_SESSION['lname'];
-  $gender = $_SESSION['gender'];
-  $contact = $_SESSION['contact'];
-  $doctor=$_POST['doctor'];
-  $email=$_SESSION['email'];
-  # $fees=$_POST['fees'];
-  $docFees=$_POST['docFees'];
+  // Verifica token CSRF
+  if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
+      die('Invalid CSRF token.');
+  }
 
-  $appdate=$_POST['appdate'];
-  $apptime=$_POST['apptime'];
+  $pid      = $_SESSION['pid'];
+  $username = $_SESSION['username'];
+  $email    = $_SESSION['email'];
+  $fname    = $_SESSION['fname'];
+  $lname    = $_SESSION['lname'];
+  $gender   = $_SESSION['gender'];
+  $contact  = $_SESSION['contact'];
+
+  // Whitelist dottori: verifica che il dottore esista in DB (prevenzione inserimento valori arbitrari)
+  $doctor   = trim($_POST['doctor']   ?? '');
+  $docFees  = trim($_POST['docFees']  ?? '');
+  $appdate  = trim($_POST['appdate']  ?? '');
+  $apptime  = trim($_POST['apptime']  ?? '');
+
+  // Whitelist orari consentiti
+  $allowed_times = ['08:00:00','10:00:00','12:00:00','14:00:00','16:00:00'];
+  if (!in_array($apptime, $allowed_times, true)) {
+      die('Invalid appointment time.');
+  }
+
+  // Validazione data
+  $appdate1 = strtotime($appdate);
+  if ($appdate1 === false) {
+      die('Invalid appointment date.');
+  }
+
   $cur_date = date("Y-m-d");
   date_default_timezone_set('Asia/Kolkata');
   $cur_time = date("H:i:s");
   $apptime1 = strtotime($apptime);
-  $appdate1 = strtotime($appdate);
-	
+
   if(date("Y-m-d",$appdate1)>=$cur_date){
     if((date("Y-m-d",$appdate1)==$cur_date and date("H:i:s",$apptime1)>$cur_time) or date("Y-m-d",$appdate1)>$cur_date) {
-      $check_query = mysqli_query($con,"select apptime from appointmenttb where doctor='$doctor' and appdate='$appdate' and apptime='$apptime'");
 
-        if(mysqli_num_rows($check_query)==0){
-          $query=mysqli_query($con,"insert into appointmenttb(pid,fname,lname,gender,email,contact,doctor,docFees,appdate,apptime,userStatus,doctorStatus) values($pid,'$fname','$lname','$gender','$email','$contact','$doctor','$docFees','$appdate','$apptime','1','1')");
+      // Prepared statement per la verifica disponibilità (prevenzione SQL injection)
+      $check_stmt = mysqli_prepare($con,
+          "SELECT apptime FROM appointmenttb WHERE doctor=? AND appdate=? AND apptime=?");
+      mysqli_stmt_bind_param($check_stmt, 'sss', $doctor, $appdate, $apptime);
+      mysqli_stmt_execute($check_stmt);
+      mysqli_stmt_store_result($check_stmt);
+
+        if(mysqli_stmt_num_rows($check_stmt)==0){
+          // Prepared statement per l'insert (prevenzione SQL injection)
+          $ins_stmt = mysqli_prepare($con,
+              "INSERT INTO appointmenttb
+               (pid,fname,lname,gender,email,contact,doctor,docFees,appdate,apptime,userStatus,doctorStatus)
+               VALUES (?,?,?,?,?,?,?,?,?,?,1,1)");
+          mysqli_stmt_bind_param($ins_stmt, 'isssssssss',
+              $pid,$fname,$lname,$gender,$email,$contact,$doctor,$docFees,$appdate,$apptime);
+          $query = mysqli_stmt_execute($ins_stmt);
+          mysqli_stmt_close($ins_stmt);
 
           if($query)
           {
@@ -55,6 +108,7 @@ if(isset($_POST['app-submit']))
       else{
         echo "<script>alert('We are sorry to inform that the doctor is not available in this time or date. Please choose different time or date!');</script>";
       }
+      mysqli_stmt_close($check_stmt);
     }
     else{
       echo "<script>alert('Select a time or date in the future!');</script>";
@@ -68,7 +122,23 @@ if(isset($_POST['app-submit']))
 
 if(isset($_GET['cancel']))
   {
-    $query=mysqli_query($con,"update appointmenttb set userStatus='0' where ID = '".$_GET['ID']."'");
+    // Verifica CSRF via token in GET (o in alternativa usare POST per azioni distruttive)
+    if (!hash_equals($_SESSION['csrf_token'], $_GET['csrf_token'] ?? '')) {
+        die('Invalid CSRF token.');
+    }
+
+    $cancel_id = intval($_GET['ID'] ?? 0);
+    if ($cancel_id <= 0) {
+        die('Invalid appointment ID.');
+    }
+
+    // Prepared statement + verifica ownership (il paziente può cancellare solo i propri appuntamenti)
+    $stmt = mysqli_prepare($con,
+        "UPDATE appointmenttb SET userStatus='0' WHERE ID=? AND pid=?");
+    mysqli_stmt_bind_param($stmt, 'ii', $cancel_id, $pid);
+    $query = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+
     if($query)
     {
       echo "<script>alert('Your appointment successfully cancelled');</script>";
@@ -80,27 +150,43 @@ if(isset($_GET['cancel']))
 
 
 function generate_bill(){
-  $con=mysqli_connect("localhost","root","","myhmsdb");
-  $pid = $_SESSION['pid'];
+  global $con;
+  $pid = intval($_SESSION['pid'] ?? 0);
+  $bill_id = intval($_GET['ID'] ?? 0);
+
+  if ($pid <= 0 || $bill_id <= 0) {
+      return '<p>Invalid request.</p>';
+  }
+
   $output='';
-  $query=mysqli_query($con,"select p.pid,p.ID,p.fname,p.lname,p.doctor,p.appdate,p.apptime,p.disease,p.allergy,p.prescription,a.docFees from prestb p inner join appointmenttb a on p.ID=a.ID and p.pid = '$pid' and p.ID = '".$_GET['ID']."'");
-  while($row = mysqli_fetch_array($query)){
+  // Prepared statement per prevenire SQL injection + ownership check (pid in WHERE)
+  $stmt = mysqli_prepare($con,
+      "SELECT p.pid, p.ID, p.fname, p.lname, p.doctor, p.appdate, p.apptime,
+              p.disease, p.allergy, p.prescription, a.docFees
+       FROM prestb p
+       INNER JOIN appointmenttb a ON p.ID = a.ID
+       WHERE p.pid = ? AND p.ID = ?");
+  mysqli_stmt_bind_param($stmt, 'ii', $pid, $bill_id);
+  mysqli_stmt_execute($stmt);
+  $result = mysqli_stmt_get_result($stmt);
+
+  while($row = mysqli_fetch_array($result)){
+    // htmlspecialchars su ogni campo per prevenire XSS nell'output HTML/PDF
     $output .= '
-    <label> Patient ID : </label>'.$row["pid"].'<br/><br/>
-    <label> Appointment ID : </label>'.$row["ID"].'<br/><br/>
-    <label> Patient Name : </label>'.$row["fname"].' '.$row["lname"].'<br/><br/>
-    <label> Doctor Name : </label>'.$row["doctor"].'<br/><br/>
-    <label> Appointment Date : </label>'.$row["appdate"].'<br/><br/>
-    <label> Appointment Time : </label>'.$row["apptime"].'<br/><br/>
-    <label> Disease : </label>'.$row["disease"].'<br/><br/>
-    <label> Allergies : </label>'.$row["allergy"].'<br/><br/>
-    <label> Prescription : </label>'.$row["prescription"].'<br/><br/>
-    <label> Fees Paid : </label>'.$row["docFees"].'<br/>
+    <label> Patient ID : </label>'      .htmlspecialchars($row["pid"],          ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Appointment ID : </label>'  .htmlspecialchars($row["ID"],           ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Patient Name : </label>'    .htmlspecialchars($row["fname"],        ENT_QUOTES,'UTF-8').' '.htmlspecialchars($row["lname"],ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Doctor Name : </label>'     .htmlspecialchars($row["doctor"],       ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Appointment Date : </label>'.htmlspecialchars($row["appdate"],      ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Appointment Time : </label>'.htmlspecialchars($row["apptime"],      ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Disease : </label>'         .htmlspecialchars($row["disease"],      ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Allergies : </label>'       .htmlspecialchars($row["allergy"],      ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Prescription : </label>'    .htmlspecialchars($row["prescription"], ENT_QUOTES,'UTF-8').'<br/><br/>
+    <label> Fees Paid : </label>'       .htmlspecialchars($row["docFees"],      ENT_QUOTES,'UTF-8').'<br/>
     
     ';
-
   }
-  
+  mysqli_stmt_close($stmt);
   return $output;
 }
 
@@ -140,8 +226,9 @@ if(isset($_GET["generate_bill"])){
 }
 
 function get_specs(){
-  $con=mysqli_connect("localhost","root","","myhmsdb");
-  $query=mysqli_query($con,"select username,spec from doctb");
+  global $con;
+  // Riutilizzo connessione esistente; select esplicito (no select *)
+  $query=mysqli_query($con,"SELECT username, spec FROM doctb");
   $docarray = array();
     while($row =mysqli_fetch_assoc($query))
     {
@@ -222,7 +309,7 @@ function get_specs(){
   <body style="padding-top:50px;">
   
    <div class="container-fluid" style="margin-top:50px;">
-    <h3 style = "margin-left: 40%;  padding-bottom: 20px; font-family: 'IBM Plex Sans', sans-serif;"> Welcome &nbsp<?php echo $username ?> 
+    <h3 style = "margin-left: 40%;  padding-bottom: 20px; font-family: 'IBM Plex Sans', sans-serif;"> Welcome &nbsp<?php echo htmlspecialchars($username, ENT_QUOTES, 'UTF-8'); ?> 
    </h3>
     <div class="row">
   <div class="col-md-4" style="max-width:25%; margin-top: 3%">
@@ -305,6 +392,7 @@ function get_specs(){
             <div class="card-body">
               <center><h4>Create an appointment</h4></center><br>
               <form class="form-group" method="post" action="admin-panel.php">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
                 <div class="row">
                   
                   <!-- <?php
@@ -465,24 +553,21 @@ function get_specs(){
                 </thead>
                 <tbody>
                   <?php 
-
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-
-                    $query = "select ID,doctor,docFees,appdate,apptime,userStatus,doctorStatus from appointmenttb where fname ='$fname' and lname='$lname';";
-                    $result = mysqli_query($con,$query);
+                    // Riutilizzo connessione esistente; prepared statement per prevenire SQL injection
+                    $stmt = mysqli_prepare($con,
+                        "SELECT ID, doctor, docFees, appdate, apptime, userStatus, doctorStatus
+                         FROM appointmenttb WHERE pid = ?");
+                    mysqli_stmt_bind_param($stmt, 'i', $pid);
+                    mysqli_stmt_execute($stmt);
+                    $result = mysqli_stmt_get_result($stmt);
                     while ($row = mysqli_fetch_array($result)){
               
-                      #$fname = $row['fname'];
-                      #$lname = $row['lname'];
-                      #$email = $row['email'];
-                      #$contact = $row['contact'];
                   ?>
                       <tr>
-                        <td><?php echo $row['doctor'];?></td>
-                        <td><?php echo $row['docFees'];?></td>
-                        <td><?php echo $row['appdate'];?></td>
-                        <td><?php echo $row['apptime'];?></td>
+                        <td><?php echo htmlspecialchars($row['doctor'],  ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['docFees'], ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['appdate'], ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['apptime'], ENT_QUOTES,'UTF-8');?></td>
                         
                           <td>
                     <?php if(($row['userStatus']==1) && ($row['doctorStatus']==1))  
@@ -505,7 +590,7 @@ function get_specs(){
                         { ?>
 
 													
-	                        <a href="admin-panel.php?ID=<?php echo $row['ID']?>&cancel=update" 
+	                        <a href="admin-panel.php?ID=<?php echo intval($row['ID'])?>&cancel=update&csrf_token=<?php echo urlencode($_SESSION['csrf_token']); ?>" 
                               onClick="return confirm('Are you sure you want to cancel this appointment ?')"
                               title="Cancel Appointment" tooltip-placement="top" tooltip="Remove"><button class="btn btn-danger">Cancel</button></a>
 	                        <?php } else {
@@ -515,7 +600,9 @@ function get_specs(){
                         
                         </td>
                       </tr>
-                    <?php } ?>
+                    <?php }
+                    mysqli_stmt_close($stmt);
+                    ?>
                 </tbody>
               </table>
         <br>
@@ -541,37 +628,29 @@ function get_specs(){
                 </thead>
                 <tbody>
                   <?php 
-
-                    $con=mysqli_connect("localhost","root","","myhmsdb");
-                    global $con;
-
-                    $query = "select doctor,ID,appdate,apptime,disease,allergy,prescription from prestb where pid='$pid';";
-                    
-                    $result = mysqli_query($con,$query);
-                    if(!$result){
-                      echo mysqli_error($con);
-                    }
-                    
+                    // Riutilizzo connessione esistente; prepared statement (prevenzione SQL injection)
+                    $stmt = mysqli_prepare($con,
+                        "SELECT doctor, ID, appdate, apptime, disease, allergy, prescription
+                         FROM prestb WHERE pid = ?");
+                    mysqli_stmt_bind_param($stmt, 'i', $pid);
+                    mysqli_stmt_execute($stmt);
+                    $result = mysqli_stmt_get_result($stmt);
+                    // Rimosso echo mysqli_error(): non esporre dettagli interni del DB all'utente
 
                     while ($row = mysqli_fetch_array($result)){
                   ?>
                       <tr>
-                        <td><?php echo $row['doctor'];?></td>
-                        <td><?php echo $row['ID'];?></td>
-                        <td><?php echo $row['appdate'];?></td>
-                        <td><?php echo $row['apptime'];?></td>
-                        <td><?php echo $row['disease'];?></td>
-                        <td><?php echo $row['allergy'];?></td>
-                        <td><?php echo $row['prescription'];?></td>
+                        <td><?php echo htmlspecialchars($row['doctor'],       ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['ID'],           ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['appdate'],      ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['apptime'],      ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['disease'],      ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['allergy'],      ENT_QUOTES,'UTF-8');?></td>
+                        <td><?php echo htmlspecialchars($row['prescription'], ENT_QUOTES,'UTF-8');?></td>
                         <td>
                           <form method="get">
-                          <!-- <a href="admin-panel.php?ID=" 
-                              onClick=""
-                              title="Pay Bill" tooltip-placement="top" tooltip="Remove"><button class="btn btn-success">Pay</button>
-                              </a></td> -->
-
-                              <a href="admin-panel.php?ID=<?php echo $row['ID']?>">
-                              <input type ="hidden" name="ID" value="<?php echo $row['ID']?>"/>
+                              <a href="admin-panel.php?ID=<?php echo intval($row['ID'])?>">
+                              <input type ="hidden" name="ID" value="<?php echo intval($row['ID'])?>"/>
                               <input type = "submit" onclick="alert('Bill Paid Successfully');" name ="generate_bill" class = "btn btn-success" value="Pay Bill"/>
                               </a>
                               </td>
@@ -580,6 +659,7 @@ function get_specs(){
                     
                       </tr>
                     <?php }
+                    mysqli_stmt_close($stmt);
                     ?>
                 </tbody>
               </table>

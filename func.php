@@ -1,39 +1,52 @@
 <?php
 session_start();
 $con=mysqli_connect("localhost","root","","myhmsdb");
+
 if(isset($_POST['patsub'])){
-	$email=$_POST['email'];
-	$password=$_POST['password2'];
-	$query="select * from patreg where email='$email' and password='$password';";
-	$result=mysqli_query($con,$query);
-	if(mysqli_num_rows($result)==1)
-	{
-		while($row=mysqli_fetch_array($result,MYSQLI_ASSOC)){
-      $_SESSION['pid'] = $row['pid'];
-      $_SESSION['username'] = $row['fname']." ".$row['lname'];
-      $_SESSION['fname'] = $row['fname'];
-      $_SESSION['lname'] = $row['lname'];
-      $_SESSION['gender'] = $row['gender'];
-      $_SESSION['contact'] = $row['contact'];
-      $_SESSION['email'] = $row['email'];
+	$email = trim($_POST['email']);
+	$password = $_POST['password2'];
+    
+    // Preparazione della query per prevenire SQL Injection
+    $stmt = $con->prepare("SELECT pid, fname, lname, gender, contact, email, password FROM patreg WHERE email = ?");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+	if($row = $result->fetch_assoc()) {
+        // Verifica sicura della password tramite Hash
+        if(password_verify($password, $row['password'])) {
+            $_SESSION['pid'] = $row['pid'];
+            $_SESSION['username'] = $row['fname']." ".$row['lname'];
+            $_SESSION['fname'] = $row['fname'];
+            $_SESSION['lname'] = $row['lname'];
+            $_SESSION['gender'] = $row['gender'];
+            $_SESSION['contact'] = $row['contact'];
+            $_SESSION['email'] = $row['email'];
+            
+            header("Location:admin-panel.php");
+            exit();
+        } else {
+            echo("<script>alert('Invalid Username or Password. Try Again!');
+                  window.location.href = 'index1.php';</script>");
+        }
+	} else {
+        echo("<script>alert('Invalid Username or Password. Try Again!');
+              window.location.href = 'index1.php';</script>");
     }
-		header("Location:admin-panel.php");
-	}
-  else {
-    echo("<script>alert('Invalid Username or Password. Try Again!');
-          window.location.href = 'index1.php';</script>");
-    // header("Location:error.php");
-  }
-		
+    $stmt->close();
 }
+
 if(isset($_POST['update_data']))
 {
-	$contact=$_POST['contact'];
-	$status=$_POST['status'];
-	$query="update appointmenttb set payment='$status' where contact='$contact';";
-	$result=mysqli_query($con,$query);
-	if($result)
-		header("Location:updated.php");
+    // Preparazione della query UPDATE per prevenire SQL Injection
+    $stmt_update = $con->prepare("UPDATE appointmenttb SET payment = ? WHERE contact = ?");
+    $stmt_update->bind_param("ss", $_POST['status'], $_POST['contact']);
+    
+    if($stmt_update->execute()) {
+        header("Location:updated.php");
+        exit();
+    }
+    $stmt_update->close();
 }
 
 
@@ -54,25 +67,28 @@ if(isset($_POST['update_data']))
 
 if(isset($_POST['doc_sub']))
 {
-	$doctor=$_POST['doctor'];
-  $dpassword=$_POST['dpassword'];
-  $demail=$_POST['demail'];
-  $docFees=$_POST['docFees'];
-	$query="insert into doctb(username,password,email,docFees)values('$doctor','$dpassword','$demail','$docFees')";
-	$result=mysqli_query($con,$query);
-	if($result)
-		header("Location:adddoc.php");
+    // Hashing della password prima dell'inserimento nel database
+    $hashed_password = password_hash($_POST['dpassword'], PASSWORD_DEFAULT);
+    
+    // Preparazione della query INSERT per prevenire SQL Injection
+    $stmt_insert = $con->prepare("INSERT INTO doctb (username, password, email, docFees) VALUES (?, ?, ?, ?)");
+    $stmt_insert->bind_param("sssi", $_POST['doctor'], $hashed_password, $_POST['demail'], $_POST['docFees']);
+    
+    if($stmt_insert->execute()) {
+        header("Location:adddoc.php");
+        exit();
+    }
+    $stmt_insert->close();
 }
+
 function display_admin_panel(){
 	echo '<!DOCTYPE html>
 <html lang="en">
   <head>
-    <!-- Required meta tags -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="stylesheet" type="text/css" href="font-awesome-4.7.0/css/font-awesome.min.css">
     <link rel="stylesheet" href="style.css">
-    <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css" integrity="sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M" crossorigin="anonymous">
       <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
   <a class="navbar-brand" href="#"><i class="fa fa-user-plus" aria-hidden="true"></i> Global Hospital</a>
@@ -142,10 +158,7 @@ function display_admin_panel(){
                   <div class="col-md-8">
                    <select name="doctor" class="form-control" >
 
-                     <!-- <option value="" disabled selected>Select Doctor</option>
-                     <option value="Dr. Punam Shaw">Dr. Punam Shaw</option>
-                      <option value="Dr. Ashok Goyal">Dr. Ashok Goyal</option> -->
-                      <?php display_docs();?>
+                     <?php display_docs();?>
 
 
 
@@ -199,13 +212,10 @@ function display_admin_panel(){
   </div>
 </div>
    </div>
-    <!-- Optional JavaScript -->
-    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.11.0/umd/popper.min.js" integrity="sha384-b/U6ypiBEHpOf/4+1nzFpr53nxSS+GLCkfwBdFNTxtclqqenISfwAzpKaMNFNmj4" crossorigin="anonymous"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/js/bootstrap.min.js" integrity="sha384-h0AbiXch4ZDo7tp9hKZ4TsHbi047NrKGLO3SEJAg45jXxnGIfYzk4Si90RDIqNm1" crossorigin="anonymous"></script>
-    <!--Sweet alert js-->
-   <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/7.33.1/sweetalert2.all.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/7.33.1/sweetalert2.all.js"></script>
    <script type="text/javascript">
    $(document).ready(function(){
    	swal({
