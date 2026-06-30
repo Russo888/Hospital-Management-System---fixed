@@ -46,20 +46,18 @@ if(isset($_POST['doctor_search_submit']))
   </thead>
   <tbody>";
   // while ($row=mysqli_fetch_array($result)){
-        $username = $row['username'];
-        
-        // MODIFICA: Oscuriamo la password per evitare la Privacy Violation
-        $password = "********"; 
-        
-        $email = $row['email'];
-        $docFees = $row['docFees'];
-        echo "<tr>
-          <td>" . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . "</td>
-          <td>$password</td>
-          <td>" . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . "</td>
-          <td>" . htmlspecialchars($docFees, ENT_QUOTES, 'UTF-8') . "</td>
-        </tr>";
-  // }
+		$username = $row['username'];
+
+		$email = $row['email'];
+		$docFees = $row['docFees'];
+		echo "<tr>
+		  <td>" . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . "</td>
+		  <td>********</td>
+		  <td>" . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . "</td>
+		  <td>" . htmlspecialchars($docFees, ENT_QUOTES, 'UTF-8') . "</td>
+		</tr>";
+
+	// }
 
 
 	echo "</tbody></table><center><a href='admin-panel1.php' class='btn btn-light'>Back to dashboard</a></div></center></div></div></div>";
