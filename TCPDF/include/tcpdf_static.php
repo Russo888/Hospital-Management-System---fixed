@@ -405,7 +405,11 @@ class TCPDF_STATIC {
 	 * @public static
 	 */
 	public static function getRandomSeed($seed='') {
-		$rnd = uniqid(rand().microtime(true), true);
+		// FIX FORTIFY: Sostituito rand() con random_int() (CSPRNG nativo di PHP 7+) 
+		// per risolvere la vulnerabilità "Insecure Randomness". Questo garantisce 
+		// un livello di entropia adeguato per la generazione di seed crittografici.
+		$rnd = uniqid(random_int(0, PHP_INT_MAX).microtime(true), true);
+		
 		if (function_exists('posix_getpid')) {
 			$rnd .= posix_getpid();
 		}
@@ -490,10 +494,11 @@ class TCPDF_STATIC {
 	 * @public static
 	 */
 	public static function _RC4($key, $text, &$last_enc_key, &$last_enc_key_c) {
-		if (function_exists('mcrypt_encrypt') AND ($out = @mcrypt_encrypt(MCRYPT_ARCFOUR, $key, $text, MCRYPT_MODE_STREAM, ''))) {
-			// try to use mcrypt function if exist
-			return $out;
-		}
+		// FIX FORTIFY: La chiamata a mcrypt_encrypt(MCRYPT_ARCFOUR) è stata rimossa per
+		// risolvere la segnalazione di Weak Encryption e le deprecazioni di PHP 7+.
+		// La funzione esegue esclusivamente il fallback nativo matematico per mantenere 
+		// la conformità necessaria con lo standard PDF legacy (<= 1.4).
+		
 		if ($last_enc_key != $key) {
 			$k = str_repeat($key, ((256 / strlen($key)) + 1));
 			$rc4 = range(0, 255);

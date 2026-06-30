@@ -2,11 +2,22 @@
 session_start();
 $con=mysqli_connect("localhost","root","","myhmsdb");
 if(isset($_POST['search_submit'])){
-  $contact=$_POST['contact'];
-  $docname = $_SESSION['dname'];
- $query="select * from appointmenttb where contact='$contact' and doctor='$docname';";
- $result=mysqli_query($con,$query);
- echo '<!DOCTYPE html>
+
+    $contact = $_POST['contact'];
+    $docname = $_SESSION['dname'];
+    
+    // Utilizzo dei Prepared Statements con segnaposto (?) per prevenire la SQL Injection
+    $query = "select * from appointmenttb where contact=? and doctor=?";
+    $stmt = mysqli_prepare($con, $query);
+    
+    // Il parametro "ss" indica che stiamo passando due stringhe (string, string)
+    mysqli_stmt_bind_param($stmt, "ss", $contact, $docname);
+    mysqli_stmt_execute($stmt);
+    
+    // Recuperiamo il risultato nel formato compatibile con il resto del tuo codice
+    $result = mysqli_stmt_get_result($stmt);
+
+echo '<!DOCTYPE html>
 <html lang="en">
   <head>
     <!-- Required meta tags -->
@@ -33,22 +44,24 @@ if(isset($_POST['search_submit'])){
   <tbody>
   ';
   while($row=mysqli_fetch_array($result)){
-    $fname=$row['fname'];
-    $lname=$row['lname'];
-    $email=$row['email'];
-    $contact=$row['contact'];
-    $appdate=$row['appdate'];
-    $apptime=$row['apptime'];
+    $fname=$row['fname']; 
+    $lname = htmlspecialchars($row['lname'], ENT_QUOTES, 'UTF-8');
+    $email = htmlspecialchars($row['email'], ENT_QUOTES, 'UTF-8');
+    $contact = htmlspecialchars($row['contact'], ENT_QUOTES, 'UTF-8');
+    $appdate = htmlspecialchars($row['appdate'], ENT_QUOTES, 'UTF-8');
+    $apptime = htmlspecialchars($row['apptime'], ENT_QUOTES, 'UTF-8');
+
     echo '<tr>
-      <td>'.$fname.'</td>
+      <td>'.htmlspecialchars($fname, ENT_QUOTES, 'UTF-8').'</td>
       <td>'.$lname.'</td>
       <td>'.$email.'</td>
       <td>'.$contact.'</td>
       <td>'.$appdate.'</td>
       <td>'.$apptime.'</td>
     </tr>';
-  }
-echo '</tbody></table></div> 
+}
+
+echo '</tbody></table></div>';
 <div><a href="doctor-panel.php" class="btn btn-light">Go Back</a></div>
 <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->

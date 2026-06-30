@@ -32,7 +32,7 @@
 
 
 
-									<?php
+								<?php
 									// Prepared statement: evita concatenazione diretta in query SQL
 									$stmt = mysqli_prepare($con, "SELECT fullName FROM users WHERE id = ?");
 									mysqli_stmt_bind_param($stmt, 'i', $_SESSION['id']);

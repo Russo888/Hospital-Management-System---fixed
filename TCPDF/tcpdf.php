@@ -4293,8 +4293,14 @@ class TCPDF {
 		}
 		// include font file
 		if (!TCPDF_STATIC::empty_string($fontfile) AND (@TCPDF_STATIC::file_exists($fontfile))) {
-			include($fontfile);
-		} else {
+
+			$real_fontfile = realpath($fontfile);
+			$allowed_fontdir = realpath(TCPDF_FONTS::_getfontpath());
+			if ($real_fontfile === false || strpos($real_fontfile, $allowed_fontdir) !== 0) {
+				$this->Error('Security Error: Tentativo di inclusione file font non valido.');
+			}
+			include($real_fontfile);
+ 		} else {
 			$this->Error('Could not include font definition file: '.$family.'');
 		}
 		// check font parameters
@@ -10939,6 +10945,8 @@ class TCPDF {
 		if ($owner_pass === null) {
 			$owner_pass = md5(TCPDF_STATIC::getRandomSeed());
 		}
+
+		$user_pass = is_string($user_pass) ? $user_pass : strval($user_pass);
 		$this->encryptdata['user_password'] = $user_pass;
 		$this->encryptdata['owner_password'] = $owner_pass;
 		$this->encryptdata['mode'] = $mode;
