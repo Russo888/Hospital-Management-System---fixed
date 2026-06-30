@@ -395,19 +395,7 @@ function get_specs(){
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
                 <div class="row">
                   
-                  <!-- <?php
-
-                        $con=mysqli_connect("localhost","root","","myhmsdb");
-                        $query=mysqli_query($con,"select username,spec from doctb");
-                        $docarray = array();
-                          while($row =mysqli_fetch_assoc($query))
-                          {
-                              $docarray[] = $row;
-                          }
-                          echo json_encode($docarray);
-
-                  ?> -->
-        
+                  
 
                     <div class="col-md-4">
                           <label for="spec">Specialization:</label>
