@@ -32,11 +32,17 @@
 
 
 
-									<?php $query=mysqli_query($con,"select fullName from users where id='".$_SESSION['id']."'");
-while($row=mysqli_fetch_array($query))
-{
-	echo $row['fullName'];
-}
+									<?php
+									// Prepared statement: evita concatenazione diretta in query SQL
+									$stmt = mysqli_prepare($con, "SELECT fullName FROM users WHERE id = ?");
+									mysqli_stmt_bind_param($stmt, 'i', $_SESSION['id']);
+									mysqli_stmt_execute($stmt);
+									$result = mysqli_stmt_get_result($stmt);
+									while ($row = mysqli_fetch_array($result)) {
+										// htmlspecialchars: previene Persistent XSS (riga 38) su dato proveniente da DB
+										echo htmlspecialchars($row['fullName'], ENT_QUOTES, 'UTF-8');
+									}
+									mysqli_stmt_close($stmt);
 									?> <i class="ti-angle-down"></i></i></span>
 								</a>
 								<ul class="dropdown-menu dropdown-dark">
