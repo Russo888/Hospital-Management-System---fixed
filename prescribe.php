@@ -8,29 +8,77 @@ $apptime='';
 $fname = '';
 $lname= '';
 $doctor = $_SESSION['dname'];
-if(isset($_GET['pid']) && isset($_GET['ID']) && ($_GET['appdate']) && isset($_GET['apptime']) && isset($_GET['fname']) && isset($_GET['lname'])) {
-$pid = $_GET['pid'];
+$doctorSafe = htmlspecialchars($doctor, ENT_QUOTES, 'UTF-8');
+
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfTokenSafe = htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8');
+
+function getAppointmentForPrescription($con, $pid, $ID, $doctor) {
+  $stmt = mysqli_prepare($con, "SELECT fname, lname, appdate, apptime FROM appointmenttb WHERE pid = ? AND ID = ? AND doctor = ? LIMIT 1");
+
+  if (!$stmt) {
+    return null;
+  }
+
+  mysqli_stmt_bind_param($stmt, "sss", $pid, $ID, $doctor);
+  mysqli_stmt_execute($stmt);
+  $result = mysqli_stmt_get_result($stmt);
+  $appointment = mysqli_fetch_array($result, MYSQLI_ASSOC);
+  mysqli_stmt_close($stmt);
+
+  return $appointment ?: null;
+}
+
+if(isset($_GET['pid']) && isset($_GET['ID'])) {
+  $pid = $_GET['pid'];
   $ID = $_GET['ID'];
-  $fname = $_GET['fname'];
-  $lname = $_GET['lname'];
-  $appdate = $_GET['appdate'];
-  $apptime = $_GET['apptime'];
+  $appointment = getAppointmentForPrescription($con, $pid, $ID, $doctor);
+
+  if ($appointment) {
+    $fname = $appointment['fname'];
+    $lname = $appointment['lname'];
+    $appdate = $appointment['appdate'];
+    $apptime = $appointment['apptime'];
+  }
+  else {
+    echo "<script>alert('Invalid appointment selected.'); window.location.href='doctor-panel.php';</script>";
+    exit();
+  }
 }
 
 
 
-if(isset($_POST['prescribe']) && isset($_POST['pid']) && isset($_POST['ID']) && isset($_POST['appdate']) && isset($_POST['apptime']) && isset($_POST['lname']) && isset($_POST['fname'])){
-  $appdate = $_POST['appdate'];
-  $apptime = $_POST['apptime'];
-  $disease = $_POST['disease'];
-  $allergy = $_POST['allergy'];
-  $fname = $_POST['fname'];
-  $lname = $_POST['lname'];
+if(isset($_POST['prescribe']) && isset($_POST['pid']) && isset($_POST['ID'])){
+  if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+    echo "<script>alert('Invalid request. Please try again.'); window.location.href='doctor-panel.php';</script>";
+    exit();
+  }
   $pid = $_POST['pid'];
   $ID = $_POST['ID'];
+  $appointment = getAppointmentForPrescription($con, $pid, $ID, $doctor);
+
+  if (!$appointment) {
+    echo "<script>alert('Invalid appointment data. Please try again.'); window.location.href='doctor-panel.php';</script>";
+    exit();
+  }
+
+  $fname = $appointment['fname'];
+  $lname = $appointment['lname'];
+  $appdate = $appointment['appdate'];
+  $apptime = $appointment['apptime'];
+  $disease = $_POST['disease'];
+  $allergy = $_POST['allergy'];
   $prescription = $_POST['prescription'];
   
-  $query=mysqli_query($con,"insert into prestb(doctor,pid,ID,fname,lname,appdate,apptime,disease,allergy,prescription) values ('$doctor','$pid','$ID','$fname','$lname','$appdate','$apptime','$disease','$allergy','$prescription')");
+  $stmt = mysqli_prepare($con, "INSERT INTO prestb(doctor, pid, ID, fname, lname, appdate, apptime, disease, allergy, prescription) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+  if ($stmt) {
+    mysqli_stmt_bind_param($stmt, "ssssssssss", $doctor, $pid, $ID, $fname, $lname, $appdate, $apptime, $disease, $allergy, $prescription);
+    $query = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+
     if($query)
     {
       echo "<script>alert('Prescribed successfully!');</script>";
@@ -38,6 +86,10 @@ if(isset($_POST['prescribe']) && isset($_POST['pid']) && isset($_POST['ID']) && 
     else{
       echo "<script>alert('Unable to process your request. Try again!');</script>";
     }
+  }
+  else{
+    echo "<script>alert('Unable to prepare your request. Try again!');</script>";
+  }
   // else{
   //   echo "<script>alert('GET is not working!');</script>";
   // }initial
@@ -112,7 +164,7 @@ if(isset($_POST['prescribe']) && isset($_POST['pid']) && isset($_POST['ID']) && 
 
 <body style="padding-top:50px;">
    <div class="container-fluid" style="margin-top:50px;">
-    <h3 style = "margin-left: 40%;  padding-bottom: 20px; font-family: 'IBM Plex Sans', sans-serif;"> Welcome &nbsp<?php echo $doctor ?>
+    <h3 style = "margin-left: 40%;  padding-bottom: 20px; font-family: 'IBM Plex Sans', sans-serif;"> Welcome &nbsp<?php echo $doctorSafe; ?>
    </h3>
 
    <div class="tab-pane" id="list-pres" role="tabpanel" aria-labelledby="list-pres-list">
@@ -135,12 +187,9 @@ if(isset($_POST['prescribe']) && isset($_POST['pid']) && isset($_POST['ID']) && 
                   <!-- <input type="text" class="form-control"  name="prescription"  required> -->
                   <textarea id="prescription" cols="86" rows ="10" name="prescription" required></textarea>
                   </div><br><br><br>
-                  <input type="hidden" name="fname" value="<?php echo $fname ?>" />
-                  <input type="hidden" name="lname" value="<?php echo $lname ?>" />
-                  <input type="hidden" name="appdate" value="<?php echo $appdate ?>" />
-                  <input type="hidden" name="apptime" value="<?php echo $apptime ?>" />
-                  <input type="hidden" name="pid" value="<?php echo $pid ?>" />
-                  <input type="hidden" name="ID" value="<?php echo $ID ?>" />
+                  <input type="hidden" name="csrf_token" value="<?php echo $csrfTokenSafe; ?>" />
+                  <input type="hidden" name="pid" value="<?php echo htmlspecialchars($pid, ENT_QUOTES, 'UTF-8'); ?>" />
+                  <input type="hidden" name="ID" value="<?php echo htmlspecialchars($ID, ENT_QUOTES, 'UTF-8'); ?>" />
                   <br><br><br><br>
           <input type="submit" name="prescribe" value="Prescribe" class="btn btn-primary" style="margin-left: 40pc;">
           
@@ -150,5 +199,3 @@ if(isset($_POST['prescribe']) && isset($_POST['pid']) && isset($_POST['ID']) && 
       </div>
       </div>
       
-
-  
