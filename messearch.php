@@ -10,11 +10,15 @@
 include("newfunc.php");
 if(isset($_POST['mes_search_submit']))
 {
-	$contact=$_POST['mes_contact'];
-	$query = "select * from contact where contact= '$contact'";
-  $result = mysqli_query($con,$query);
-  $row=mysqli_fetch_array($result);
-  if($row['name']=="" & $row['email']=="" & $row['contact']=="" & $row['message']==""){
+ 	$contact=$_POST['mes_contact'];
+	$query = "select * from contact where contact= ?";
+	$stmt = mysqli_prepare($con, $query);
+	mysqli_stmt_bind_param($stmt, "s", $contact);
+	mysqli_stmt_execute($stmt);
+	$result = mysqli_stmt_get_result($stmt);
+	$row = mysqli_fetch_array($result);
+
+ 	if($row['name']=="" & $row['email']=="" & $row['contact']=="" & $row['message']==""){
     echo "<script> alert('No entries found! Please enter valid details'); 
           window.location.href = 'admin-panel1.php#list-doc';</script>";
   } 
@@ -37,15 +41,16 @@ if(isset($_POST['mes_search_submit']))
           $name = $row['name'];
           $email = $row['email'];
           $contact = $row['contact'];
-          $message = $row['message'];
+		      $message = $row['message'];
+
           echo "<tr>
-            <td>$name</td>
-            <td>$email</td>
-            <td>$contact</td>
-            <td>$message</td>
+            <td>" . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($contact, ENT_QUOTES, 'UTF-8') . "</td>
+            <td>" . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . "</td>
           </tr>";
-    
-    echo "</tbody></table><center><a href='admin-panel1.php' class='btn btn-light'>Back to your Dashboard</a></div></center></div></div></div>";
+
+          echo "</tbody></table><center><a href='admin-panel1.php' class='btn btn-light'>Back to your Dashboard</a></div></center></div></div></div>";
   }
   }
 	
