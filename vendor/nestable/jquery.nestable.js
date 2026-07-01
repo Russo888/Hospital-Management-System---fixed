@@ -130,9 +130,9 @@
                 window.addEventListener('touchcancel', onEndEvent, false);
             }
 
-            list.el.on('mousedown', onStartEvent);
-            list.w.on('mousemove', onMoveEvent);
-            list.w.on('mouseup', onEndEvent);
+            list.el[0].addEventListener('mousedown', onStartEvent, false);
+            list.w[0].addEventListener('mousemove', onMoveEvent, false);
+            list.w[0].addEventListener('mouseup', onEndEvent, false);
 
         },
 
