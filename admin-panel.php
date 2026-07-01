@@ -15,7 +15,7 @@ include('func.php');
 include('newfunc.php');
 
 // Credenziali DB caricate da file di configurazione esterno (fuori dalla webroot)
-require_once('/etc/myhms/db_config.php'); // definisce DB_HOST, DB_USER, DB_PASS, DB_NAME
+require_once('C:\\myhms\\db_config.php'); // definisce DB_HOST, DB_USER, DB_PASS, DB_NAME
 $con = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 if (!$con) {
     error_log('DB connection failed: ' . mysqli_connect_error());
