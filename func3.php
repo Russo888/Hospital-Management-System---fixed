@@ -5,25 +5,25 @@ if(isset($_POST['adsub'])){
 	$username=$_POST['username1'];
     $password=$_POST['password2'];
 
-    // MODIFICA: Utilizzo dei prepared statement per prevenire SQL Injection sul login admin
-    $query = "select * from admintb where username=? and password=?";
+    // Cerchiamo l'utente solo per username, poi verifichiamo la password con password_verify()
+    $query = "select * from admintb where username=?";
     $stmt = mysqli_prepare($con, $query);
-    
-    // "ss" indica che stiamo passando due parametri di tipo stringa ($username e $password)
-    mysqli_stmt_bind_param($stmt, "ss", $username, $password);
+    mysqli_stmt_bind_param($stmt, "s", $username);
     mysqli_stmt_execute($stmt);
-    
-    // Otteniamo il risultato per renderlo compatibile con mysqli_num_rows
     $result = mysqli_stmt_get_result($stmt);
 
     if(mysqli_num_rows($result)==1)
 	{
-		$_SESSION['username']=$username;
-		header("Location:admin-panel1.php");
+		$row = mysqli_fetch_assoc($result);
+		// Verifica la password contro l'hash bcrypt salvato nel DB
+		if(password_verify($password, $row['password'])){
+			$_SESSION['username']=$username;
+			header("Location:admin-panel1.php");
+			exit();
+		}
 	}
-	else
-		// header("Location:error2.php");
-		echo("<script>alert('Invalid Username or Password. Try Again!');
+	// Credenziali non valide
+	echo("<script>alert('Invalid Username or Password. Try Again!');
           window.location.href = 'index.php';</script>");
 }
 if(isset($_POST['update_data']))
