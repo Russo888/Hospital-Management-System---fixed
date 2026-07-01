@@ -89,23 +89,23 @@
                 options.accessControl.allowHeaders
             );
             var handleResult = function (result, redirect) {
-                    if (redirect) {
-                        res.writeHead(302, {
-                            'Location': redirect.replace(
-                                /%s/,
-                                encodeURIComponent(JSON.stringify(result))
-                            )
-                        });
-                        res.end();
-                    } else {
-                        res.writeHead(200, {
-                            'Content-Type': req.headers.accept
-                                .indexOf('application/json') !== -1 ?
-                                        'application/json' : 'text/plain'
-                        });
-                        res.end(JSON.stringify(result));
-                    }
-                },
+                if (redirect) {
+                    res.writeHead(302, {
+                        'Location': redirect.replace(
+                            /%s/,
+                            encodeURIComponent(JSON.stringify(result))
+                        )
+                    });
+                    res.end();
+                } else {
+                    res.writeHead(200, {
+                        'Content-Type': req.headers.accept
+                            .indexOf('application/json') !== -1 ?
+                            'application/json' : 'text/plain'
+                    });
+                    res.end(JSON.stringify(result));
+                }
+            },
                 setNoCacheHeaders = function () {
                     res.setHeader('Pragma', 'no-cache');
                     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -113,32 +113,32 @@
                 },
                 handler = new UploadHandler(req, res, handleResult);
             switch (req.method) {
-            case 'OPTIONS':
-                res.end();
-                break;
-            case 'HEAD':
-            case 'GET':
-                if (req.url === '/') {
-                    setNoCacheHeaders();
-                    if (req.method === 'GET') {
-                        handler.get();
+                case 'OPTIONS':
+                    res.end();
+                    break;
+                case 'HEAD':
+                case 'GET':
+                    if (req.url === '/') {
+                        setNoCacheHeaders();
+                        if (req.method === 'GET') {
+                            handler.get();
+                        } else {
+                            res.end();
+                        }
                     } else {
-                        res.end();
+                        fileServer.serve(req, res);
                     }
-                } else {
-                    fileServer.serve(req, res);
-                }
-                break;
-            case 'POST':
-                setNoCacheHeaders();
-                handler.post();
-                break;
-            case 'DELETE':
-                handler.destroy();
-                break;
-            default:
-                res.statusCode = 405;
-                res.end();
+                    break;
+                case 'POST':
+                    setNoCacheHeaders();
+                    handler.post();
+                    break;
+                case 'DELETE':
+                    handler.destroy();
+                    break;
+                default:
+                    res.statusCode = 405;
+                    res.end();
             }
         };
     fileServer.respond = function (pathname, status, _headers, files, stat, req, res, finish) {
@@ -179,8 +179,8 @@
             this.url = this.deleteUrl = baseUrl + encodeURIComponent(this.name);
             Object.keys(options.imageVersions).forEach(function (version) {
                 if (_existsSync(
-                        options.uploadDir + '/' + version + '/' + that.name
-                    )) {
+                    options.uploadDir + '/' + version + '/' + that.name
+                )) {
                     that[version + 'Url'] = baseUrl + version + '/' +
                         encodeURIComponent(that.name);
                 }
@@ -203,7 +203,7 @@
                     files.push(fileInfo);
                 }
             });
-            handler.callback({files: files});
+            handler.callback({ files: files });
         });
     };
     UploadHandler.prototype.post = function () {
@@ -220,7 +220,7 @@
                     files.forEach(function (fileInfo) {
                         fileInfo.initUrls(handler.req);
                     });
-                    handler.callback({files: files}, redirect);
+                    handler.callback({ files: files }, redirect);
                 }
             };
         form.uploadDir = options.tmpDir;
@@ -272,21 +272,22 @@
             fileName;
         if (handler.req.url.slice(0, options.uploadUrl.length) === options.uploadUrl) {
             fileName = path.basename(decodeURIComponent(handler.req.url));
-            if (fileName[0] !== '.') {
+            if (fileName[0] !== '.' && /^[a-zA-Z0-9.\-_]+$/.test(fileName)) {
                 fs.unlink(options.uploadDir + '/' + fileName, function (ex) {
                     Object.keys(options.imageVersions).forEach(function (version) {
                         fs.unlink(options.uploadDir + '/' + version + '/' + fileName);
                     });
-                    handler.callback({success: !ex});
+                    handler.callback({ success: !ex });
                 });
                 return;
             }
         }
-        handler.callback({success: false});
+        handler.callback({ success: false });
     };
-    if (options.ssl) {
-        require('https').createServer(options.ssl, serve).listen(port);
-    } else {
-        require('http').createServer(serve).listen(port);
+    if (!options.ssl) {
+        throw new Error("Insecure Transport (HTTP) is disabled. SSL options are mandatory.");
     }
+    options.ssl.secureProtocol = 'TLSv1_2_method';
+    options.ssl.minVersion = 'TLSv1.2';
+    require('https').createServer(options.ssl, serve).listen(port);
 }(8888));
