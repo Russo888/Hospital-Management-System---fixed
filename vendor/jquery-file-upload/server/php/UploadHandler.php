@@ -1253,6 +1253,19 @@ class UploadHandler
             
             $redirect = stripslashes($this->get_query_param('redirect'));
             if ($redirect) {
+                // Prevenzione Header Manipulation e Open Redirect:
+                // Accettiamo solo URL relativi o URL con lo stesso host del server.
+                $parsed = parse_url($redirect);
+                $allowed_host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+                if (isset($parsed['host']) && $parsed['host'] !== $allowed_host) {
+                    // Dominio esterno: blocchiamo il redirect
+                    $redirect = null;
+                } else {
+                    // URL relativo o stesso host: rimuoviamo ulteriori caratteri di controllo
+                    $redirect = preg_replace('/[\r\n\0]+/', '', $redirect);
+                }
+            }
+            if ($redirect) {
                 $this->header('Location: '.sprintf($redirect, rawurlencode($json)));
                 return;
             }
