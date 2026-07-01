@@ -270,18 +270,44 @@
     UploadHandler.prototype.destroy = function () {
         var handler = this,
             fileName;
+
         if (handler.req.url.slice(0, options.uploadUrl.length) === options.uploadUrl) {
             fileName = path.basename(decodeURIComponent(handler.req.url));
+
+            // 1. Taint Clearing: Estraiamo esplicitamente solo i caratteri sicuri
             var match = fileName.match(/^[a-zA-Z0-9.\-_]+$/);
+
             if (fileName[0] !== '.' && match) {
-                var safeFileName = match[0];
-                var targetPath = path.join(options.uploadDir, safeFileName);
-                fs.unlink(targetPath, function (ex) {
+                var safeFileName = match[0]; // Usiamo la variabile pulita, non l'input utente!
+
+                // 2. Canonicalizzazione e validazione stretta del percorso (Fix Fortify Path Manipulation)
+                var mainFilePath = path.join(options.uploadDir, safeFileName);
+                var resolvedBaseDir = path.resolve(options.uploadDir);
+                var resolvedMainFilePath = path.resolve(mainFilePath);
+
+                // Controllo di sicurezza: verifica che il percorso canonico sia strettamente all'interno della cartella di upload
+                if (!resolvedMainFilePath.startsWith(resolvedBaseDir)) {
+                    handler.callback({ success: false });
+                    return;
+                }
+
+                fs.unlink(resolvedMainFilePath, function (ex) {
                     Object.keys(options.imageVersions).forEach(function (version) {
-                        fs.unlink(options.uploadDir + '/' + version + '/' + fileName);
+                        // 3. Canonicalizzazione e validazione dei percorsi delle miniature
+                        var versionDir = path.join(options.uploadDir, version);
+                        var versionFilePath = path.join(versionDir, safeFileName);
+
+                        var resolvedVersionDir = path.resolve(versionDir);
+                        var resolvedVersionFilePath = path.resolve(versionFilePath);
+
+                        // Controllo di sicurezza canonico anche per le miniature
+                        if (resolvedVersionFilePath.startsWith(resolvedVersionDir)) {
+                            fs.unlink(resolvedVersionFilePath, function (err) { });
+                        }
                     });
                     handler.callback({ success: !ex });
                 });
+
                 return;
             }
         }
