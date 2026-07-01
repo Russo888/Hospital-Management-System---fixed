@@ -13477,7 +13477,7 @@ class TCPDF {
 	 * @author Nicola Asuni
 	 * @since 4.6.005 (2009-04-24)
 	 */
-	public function setSignature($signing_cert=null, $private_key=null, $private_key_password=null, $extracerts='', $cert_type=2, $info=array(), $approval='') {
+	public function setSignature($signing_cert=null, $pk_data=null, $pk_pwd=null, $extracerts='', $cert_type=2, $info=array(), $approval='') {
 		// to create self-signed signature: openssl req -x509 -nodes -days 365000 -newkey rsa:1024 -keyout tcpdf.crt -out tcpdf.crt
 		// to export crt to p12: openssl pkcs12 -export -in tcpdf.crt -out tcpdf.p12
 		// to convert pfx certificate to pem: openssl
@@ -13490,12 +13490,12 @@ class TCPDF {
 		if (strlen($signing_cert) == 0) {
 			$this->Error('Please provide a certificate file and password!');
 		}
-		if (strlen($private_key) == 0) {
-			$private_key = $signing_cert;
+		if (strlen($pk_data) == 0) {
+			$pk_data = $signing_cert;
 		}
 		$this->signature_data['signcert'] = $signing_cert;
-		$this->signature_data['privkey'] = $private_key;
-		$this->signature_data['password'] = strval($private_key_password);
+		$this->signature_data['privkey'] = $pk_data;
+		$this->signature_data['password'] = strval($pk_pwd);
 		$this->signature_data['extracerts'] = $extracerts;
 		$this->signature_data['cert_type'] = $cert_type;
 		$this->signature_data['info'] = $info;
