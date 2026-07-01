@@ -272,8 +272,11 @@
             fileName;
         if (handler.req.url.slice(0, options.uploadUrl.length) === options.uploadUrl) {
             fileName = path.basename(decodeURIComponent(handler.req.url));
-            if (fileName[0] !== '.' && /^[a-zA-Z0-9.\-_]+$/.test(fileName)) {
-                fs.unlink(options.uploadDir + '/' + fileName, function (ex) {
+            var match = fileName.match(/^[a-zA-Z0-9.\-_]+$/);
+            if (fileName[0] !== '.' && match) {
+                var safeFileName = match[0];
+                var targetPath = path.join(options.uploadDir, safeFileName);
+                fs.unlink(targetPath, function (ex) {
                     Object.keys(options.imageVersions).forEach(function (version) {
                         fs.unlink(options.uploadDir + '/' + version + '/' + fileName);
                     });

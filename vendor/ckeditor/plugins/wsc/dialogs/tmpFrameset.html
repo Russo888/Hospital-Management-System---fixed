@@ -17,7 +17,6 @@ For licensing, see LICENSE.html or http://ckeditor.com/license
 			var s = document.createElement("script");
 			s.type = "text/javascript";
 
-			// Righe modificate per correggere la vulnerabilità (Open Redirect + DOM XSS):
 			// 1. Sanitizzazione base
 			var safeUrl = url.toString().trim();
 
@@ -27,14 +26,18 @@ For licensing, see LICENSE.html or http://ckeditor.com/license
 				return false;
 			}
 
-			// 3. Prevenzione Open Redirect: Validazione del dominio (solo origin corrente o percorsi relativi)
-			var isExternalUrl = /^(?:[a-z]+:)?\/\//i.test(safeUrl);
-			if (isExternalUrl && safeUrl.indexOf(window.location.origin) !== 0) {
-				console.error("Caricamento script bloccato: dominio non autorizzato.");
+			// 3. Prevenzione Open Redirect e XSS: Validazione robusta tramite oggetto URL
+			try {
+				var parsedUrl = new URL(safeUrl, window.location.href);
+				if (parsedUrl.origin !== window.location.origin || (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:')) {
+					console.error("Caricamento script bloccato: dominio o protocollo non autorizzato.");
+					return false;
+				}
+				s.src = parsedUrl.href;
+			} catch (e) {
+				console.error("URL non valido o malformato.");
 				return false;
 			}
-
-			s.src = safeUrl;
 
 			document.getElementsByTagName("head")[0].appendChild(s);
 
