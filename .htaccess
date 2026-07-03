@@ -1,0 +1,69 @@
+# ======================================================================
+# HOSPITAL MANAGEMENT SYSTEM - SECURITY HARDENING (Apache .htaccess)
+# ======================================================================
+
+# ----------------------------------------------------------------------
+# 1. DISABILITAZIONE DIRECTORY BROWSING (CWE-548)
+# ----------------------------------------------------------------------
+# Impedisce al server di mostrare l'elenco dei file se manca l'index.php
+Options -Indexes
+
+
+# ----------------------------------------------------------------------
+# 2. PROTEZIONE DEI FILE SENSIBILI E DI CONFIGURAZIONE (Information Disclosure)
+# ----------------------------------------------------------------------
+# Blocca l'accesso a file nascosti (es. .git, .env, .htaccess) e backup
+<FilesMatch "(^#.*#|\.(bak|config|dist|fla|inc|ini|log|md|psd|sh|sql|swp|json)|~)$">
+    Require all denied
+</FilesMatch>
+
+# Blocca l'accesso a file nascosti che iniziano con il punto (.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Se il db_config.php non è stato spostato fuori dalla webroot,
+# questo blocco ne impedisce l'accesso diretto dal browser
+<Files "db_config.php">
+    Require all denied
+</Files>
+
+
+# ----------------------------------------------------------------------
+# 3. IMPLEMENTAZIONE SECURITY HEADERS (CWE-693)
+# ----------------------------------------------------------------------
+<IfModule mod_headers.c>
+    # Rimuove l'intestazione che espone la versione di PHP per evitare 
+    # la profilazione (Information Gathering)
+    Header unset X-Powered-By
+    Header always unset X-Powered-By
+
+    # Previene attacchi di Clickjacking impedendo che il sito sia caricato in un iframe
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # Previene il MIME-type sniffing (forza il browser a rispettare il Content-Type dichiarato)
+    Header always set X-Content-Type-Options "nosniff"
+
+    # Minimizza l'esposizione dell'URL di provenienza quando si naviga verso siti esterni
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # ----------------------------------------------------------------------
+    # CONTENT SECURITY POLICY (CSP)
+    # ----------------------------------------------------------------------
+    # NB: Questa è una policy restrittiva. Permette caricamenti solo dal server stesso ('self').
+    # Se nel progetto usi Bootstrap, jQuery o FontAwesome tramite CDN esterne, 
+    # gli URL devono essere aggiunti qui. Esempio per Bootstrap/jQuery aggiunti alla policy:
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://code.jquery.com https://stackpath.bootstrapcdn.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://stackpath.bootstrapcdn.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'self';"
+
+</IfModule>
+
+
+# ----------------------------------------------------------------------
+# 4. FORZATURA CONNESSIONE SICURA HTTPS (HSTS)
+# ----------------------------------------------------------------------
+# Rimuovere i commenti (#) solo se il server possiede un certificato SSL valido
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>
