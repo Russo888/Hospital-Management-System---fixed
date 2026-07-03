@@ -13491,7 +13491,13 @@ class TCPDF {
 			$this->Error('Please provide a certificate file and password!');
 		}
 		if (strlen($pk_data) == 0) {
-			$pk_data = $signing_cert;
+			if (strlen($signing_cert) > 0) {
+				// Use the signing certificate as the private key source only when it is non-empty,
+				// preventing an empty encryption key from being stored (Fortify: Key Management: Empty Encryption Key).
+				$pk_data = $signing_cert;
+			} else {
+				$this->Error('Please provide a valid private key!');
+			}
 		}
 		$this->signature_data['signcert'] = $signing_cert;
 		$this->signature_data['privkey'] = $pk_data;
