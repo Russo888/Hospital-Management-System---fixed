@@ -1,5 +1,5 @@
 <?php
-$con = mysqli_connect("localhost", "root", "", "myhmsdb");
+$con = mysqli_connect("localhost", "root", "", "myhmsdb_final");
 
 if (!$con) {
   die("Database connection failed: " . mysqli_connect_error());

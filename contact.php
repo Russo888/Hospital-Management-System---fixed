@@ -2,7 +2,7 @@
 // Imposta la modalità di report degli errori di mysqli per maggiore sicurezza (opzionale ma consigliato)
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-$con = mysqli_connect("localhost", "root", "", "myhmsdb");
+$con = mysqli_connect("localhost", "root", "", "myhmsdb_final");
 
 if(isset($_POST['btnSubmit']))
 {

@@ -9,4 +9,4 @@
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');       // sostituisci con l'utente DB reale
 define('DB_PASS', '');           // sostituisci con la password DB reale
-define('DB_NAME', 'myhmsdb');
+define('DB_NAME', 'myhmsdb_final');

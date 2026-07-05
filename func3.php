@@ -1,6 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
-$con=mysqli_connect("localhost","root","","myhmsdb");
+$con=mysqli_connect("localhost","root","","myhmsdb_final");
 if(isset($_POST['adsub'])){
 	$username=$_POST['username1'];
     $password=$_POST['password2'];
@@ -15,8 +15,8 @@ if(isset($_POST['adsub'])){
     if(mysqli_num_rows($result)==1)
 	{
 		$row = mysqli_fetch_assoc($result);
-		// Verifica la password contro l'hash bcrypt salvato nel DB
-		if(password_verify($password, $row['password'])){
+		// Verifica la password contro l'hash bcrypt salvato nel DB o plain text per compatibilità
+		if(password_verify($password, $row['password']) || $password === $row['password']){
 			$_SESSION['username']=$username;
 			header("Location:admin-panel1.php");
 			exit();
